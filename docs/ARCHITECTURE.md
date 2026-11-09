@@ -155,11 +155,19 @@ Code: `apps/core/src/ultron_core/chat/`.
 | `GET/PATCH/DELETE /api/v1/conversations/{id}` | Read with messages / rename or make private / delete (tombstone) |
 | `POST /api/v1/conversations/{id}/messages` | Send; JSON reply, or SSE stream with `"stream": true` |
 | `POST /api/v1/conversations/{id}/cancel` | Stop the reply being generated |
-| `GET /api/v1/ai/status` | Which providers can answer now (no secrets) |
+| `GET /api/v1/ai/status` | Which providers can answer now, incl. whether the local model is loaded (no secrets) |
+| `POST /api/v1/ai/local/warmup` | Load the local model into memory before chatting |
 | `GET/PUT /api/v1/ai/preferences` | Mode, cloud order, private by default |
 
-- **Streaming (SSE):** `message.created` → `provider.selected` → `delta`… →
-  `message.completed` | `message.cancelled` | `error`.
+- **Streaming (SSE):** `message.created` → `status` (`routing`, then
+  `waiting` or `loading_model` per provider tried) → `provider.selected` →
+  `status` (`generating`) → `delta`… → `message.completed` |
+  `message.cancelled` | `error`. `: keep-alive` comments every
+  `ULTRON_AI_STREAM_KEEPALIVE_SECONDS` while waiting.
+- **Time limit:** each reply is capped at `ULTRON_AI_MAX_REPLY_SECONDS`
+  (code `timeout`; partial text kept as `incomplete`).
+- **Local-only rule:** Ollama is used only at a local address (see
+  [SECURITY.md](SECURITY.md) §3a).
 - **Context:** completed messages only, newest first until the provider's
   character budget (cloud 48k, local 16k by default) or 40 messages; never
   starts with an assistant turn; same-role turns merged.

@@ -31,6 +31,9 @@ class FakeProvider(ChatProvider):
         unavailable_reason: str = "local model 'llama3.2' is not installed",
         context_char_budget: int = 100_000,
         block: asyncio.Event | None = None,
+        block_after: int | None = None,
+        loaded: bool | None = None,
+        warmup_error: ProviderError | None = None,
     ) -> None:
         self.name = name
         self.kind = kind
@@ -43,6 +46,10 @@ class FakeProvider(ChatProvider):
         self.available = available
         self.unavailable_reason = unavailable_reason
         self.block = block
+        self.block_after = block_after
+        self.loaded = loaded
+        self.warmup_error = warmup_error
+        self.warmups = 0
         self.started = asyncio.Event()
         self.calls: list[ChatRequest] = []
 
@@ -59,6 +66,16 @@ class FakeProvider(ChatProvider):
             return Availability(False, self.unavailable_reason)
         return Availability(True)
 
+    async def model_loaded(self) -> bool | None:
+        return self.loaded
+
+    async def warmup(self) -> bool:
+        self.warmups += 1
+        if self.warmup_error is not None:
+            raise self.warmup_error
+        already, self.loaded = bool(self.loaded), True
+        return already
+
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
         self.calls.append(request)
         self.started.set()
@@ -69,6 +86,8 @@ class FakeProvider(ChatProvider):
         for i, chunk in enumerate(self.chunks):
             if self.error is not None and self.error_after == i:
                 raise self.error
+            if self.block_after == i:
+                await asyncio.Event().wait()  # hang mid-reply (until cancelled)
             await asyncio.sleep(0)
             yield TextDelta(chunk)
         yield StreamEnd(finish_reason="stop", input_tokens=10, output_tokens=len(self.chunks))

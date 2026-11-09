@@ -104,6 +104,7 @@ class OllamaProvider(ChatProvider):
         think: str = "false",
         num_ctx: int | None = 8192,
         keep_alive: str | None = None,
+        blocked_reason: str | None = None,
         name: str = "ollama",
     ) -> None:
         self.name = name
@@ -116,12 +117,16 @@ class OllamaProvider(ChatProvider):
         self._think = think_value(think)
         self._num_ctx = num_ctx
         self._keep_alive = keep_alive
+        # Set when the address violates the local-only policy (local_policy.py).
+        self.blocked_reason = blocked_reason
         self._cached: tuple[float, Availability] | None = None
 
     def is_configured(self) -> bool:
-        return bool(self._base_url and self.model)
+        return bool(self._base_url and self.model and not self.blocked_reason)
 
     def missing_configuration(self) -> str | None:
+        if self.blocked_reason:
+            return self.blocked_reason
         if not self._base_url:
             return "local AI not set up (ULTRON_OLLAMA_BASE_URL is empty)"
         if not self.model:
@@ -157,6 +162,43 @@ class OllamaProvider(ChatProvider):
                 {"installed_models": models[:20]},
             )
         return Availability(True, None, {"installed_models": models[:20]})
+
+    async def model_loaded(self) -> bool | None:
+        """Whether the model is already in memory (Ollama /api/ps); None if unknown."""
+        if not self.is_configured():
+            return None
+        try:
+            resp = await self._http.get(f"{self._base_url}/api/ps", timeout=self._probe_timeout)
+            resp.raise_for_status()
+            names = [m.get("name", "") for m in resp.json().get("models", [])]
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return None
+        assert self.model is not None  # noqa: S101
+        return any(model_matches(self.model, n) for n in names)
+
+    async def warmup(self) -> bool:
+        """Load the model into memory without generating anything.
+
+        Returns True if it was already loaded. Raises ProviderError subclasses."""
+        if not self.is_configured():
+            raise ProviderNotConfiguredError(f"{self.name}: {self.missing_configuration()}")
+        already = await self.model_loaded()
+        payload: dict[str, object] = {"model": self.model, "messages": []}
+        if self._keep_alive:
+            payload["keep_alive"] = self._keep_alive
+        try:
+            resp = await self._http.post(
+                f"{self._base_url}/api/chat", json=payload, timeout=self._timeout
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            self.invalidate()
+            raise ProviderUnavailableError("local AI runtime (Ollama) is not running") from exc
+        except httpx.TimeoutException as exc:
+            raise ProviderUnavailableError("local AI timed out while loading the model") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderUnavailableError("local AI connection problem") from exc
+        await self._raise_for_status(resp)
+        return bool(already)
 
     def _payload(self, request: ChatRequest) -> dict[str, object]:
         messages = [{"role": "system", "content": request.system}]

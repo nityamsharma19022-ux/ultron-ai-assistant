@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -208,18 +209,26 @@ async def send_message(
     }
     if body.stream:
         return StreamingResponse(
-            _stream(active, created),
+            _stream(active, created, settings.ai_stream_keepalive_seconds),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
     return await _collect(active, created)
 
 
-async def _stream(active: ActiveGeneration, created: dict[str, Any]) -> AsyncIterator[str]:
+async def _stream(
+    active: ActiveGeneration, created: dict[str, Any], keepalive: float
+) -> AsyncIterator[str]:
     try:
         yield _sse("message.created", created)
         while True:
-            item = await active.queue.get()
+            try:
+                item = await asyncio.wait_for(active.queue.get(), timeout=keepalive)
+            except TimeoutError:
+                # SSE comment: keeps proxies/clients from timing out while a
+                # local model loads. Clients ignore it.
+                yield ": keep-alive\n\n"
+                continue
             if item is None:
                 break
             yield _sse(*item)
@@ -251,6 +260,8 @@ async def _collect(active: ActiveGeneration, created: dict[str, Any]) -> Any:
     if event == "error":
         if payload["code"] == "internal_error":
             code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        elif payload["code"] == "timeout":
+            code = status.HTTP_504_GATEWAY_TIMEOUT
         elif payload["assistant_message"]["status"] == "failed":
             code = status.HTTP_503_SERVICE_UNAVAILABLE  # no provider could answer
         else:

@@ -29,6 +29,7 @@ from ultron_core.ai.router import (
     AIRouter,
     Completed,
     MidStreamError,
+    ProviderAttempt,
     ProviderSelected,
     RouteInfo,
     RoutingError,
@@ -132,20 +133,46 @@ class GenerationManager:
         parts: list[str] = []
         route: RouteInfo | None = None
         outcome: dict[str, Any] = {"status": "failed", "error": None, "end": None}
+        limit = settings.ai_max_reply_seconds
         try:
-            async with contextlib.aclosing(
-                router.stream(build_request, prefs, private=private)
-            ) as events:
+            await active.queue.put(("status", {"phase": "routing"}))
+            async with (
+                asyncio.timeout(limit),
+                contextlib.aclosing(router.stream(build_request, prefs, private=private)) as events,
+            ):
                 async for event in events:
-                    if isinstance(event, ProviderSelected):
+                    if isinstance(event, ProviderAttempt):
+                        await active.queue.put(("status", await _attempt_status(router, event)))
+                    elif isinstance(event, ProviderSelected):
                         route = event.route
                         await active.queue.put(("provider.selected", route.as_dict()))
+                        await active.queue.put(
+                            (
+                                "status",
+                                {
+                                    "phase": "generating",
+                                    "provider": route.provider,
+                                    "kind": route.kind.value,
+                                    "model": route.model,
+                                },
+                            )
+                        )
                     elif isinstance(event, TextDelta):
                         parts.append(event.text)
                         await active.queue.put(("delta", {"text": event.text}))
                     elif isinstance(event, Completed):
                         route = event.route
                         outcome = {"status": "complete", "error": None, "end": event.end}
+        except TimeoutError:
+            outcome = {
+                "status": "incomplete" if parts else "failed",
+                "error": {
+                    "code": "timeout",
+                    "message": f"The reply took longer than {limit:g} seconds and was stopped.",
+                    "attempts": [a.as_dict() for a in route.attempts] if route else [],
+                },
+                "end": None,
+            }
         except RoutingError as exc:
             outcome = {
                 "status": "failed",
@@ -240,3 +267,21 @@ class GenerationManager:
             await active.queue.put(("message.cancelled", payload))
         else:
             await active.queue.put(("error", {**error, **payload}))
+
+
+async def _attempt_status(router: AIRouter, event: ProviderAttempt) -> dict[str, Any]:
+    """Loading state for the app: is the (local) model still being loaded?"""
+    status: dict[str, Any] = {
+        "phase": "waiting",
+        "provider": event.provider,
+        "kind": event.kind.value,
+        "model": event.model,
+    }
+    provider = router.get(event.provider)
+    check = getattr(provider, "model_loaded", None)
+    loaded = await check() if check is not None else None
+    if loaded is not None:
+        status["model_loaded"] = loaded
+        if loaded is False:
+            status["phase"] = "loading_model"
+    return status

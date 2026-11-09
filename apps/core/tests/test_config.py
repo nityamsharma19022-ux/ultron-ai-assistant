@@ -105,5 +105,7 @@ def test_env_example_loads_and_enables_no_cloud_provider_by_default() -> None:
     # Local AI is pre-set for the owner's Windows setup (Ollama + qwen3.5:4b).
     local = next(p for p in providers if p.name == "ollama")
     assert local.model == "qwen3.5:4b"
-    assert s.ollama_base_url == "http://localhost:11434"
+    assert s.ollama_base_url == "http://127.0.0.1:11434"
+    assert s.ollama_allow_remote is False
+    assert (s.ai_max_reply_seconds, s.ai_stream_keepalive_seconds) == (300, 10)
     assert (s.ollama_think, s.ollama_num_ctx) == ("false", 8192)

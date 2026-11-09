@@ -115,6 +115,8 @@ class ProviderStatus(BaseModel):
     status: str
     reason: str | None = None
     cooldown_remaining_seconds: int | None = None
+    # Local providers: whether the model is already in memory (None = unknown).
+    model_loaded: bool | None = None
 
 
 class AIStatus(BaseModel):
@@ -123,3 +125,11 @@ class AIStatus(BaseModel):
     local_ai_available: bool
     private_conversations_supported: bool
     providers: list[ProviderStatus]
+
+
+class WarmupResult(BaseModel):
+    status: Literal["ready"]
+    provider: str
+    model: str | None
+    already_loaded: bool
+    seconds: float

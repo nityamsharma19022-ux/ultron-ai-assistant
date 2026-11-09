@@ -81,6 +81,15 @@ class RouteInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderAttempt:
+    """About to ask this provider (no reply text yet). Drives loading states."""
+
+    provider: str
+    kind: ProviderKind
+    model: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderSelected:
     route: RouteInfo
 
@@ -91,7 +100,7 @@ class Completed:
     end: StreamEnd
 
 
-RouterEvent = ProviderSelected | TextDelta | Completed
+RouterEvent = ProviderAttempt | ProviderSelected | TextDelta | Completed
 
 
 class RoutingError(Exception):
@@ -209,6 +218,7 @@ class AIRouter:
             )
             started = False
             end = StreamEnd(model=provider.model)
+            yield ProviderAttempt(provider.name, provider.kind, provider.model)
             try:
                 async for event in provider.stream(build_request(provider)):
                     if isinstance(event, TextDelta):

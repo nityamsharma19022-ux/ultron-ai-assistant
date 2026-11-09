@@ -49,6 +49,20 @@ A conversation marked **private**:
 Users can make every new conversation private by default
 (`private_by_default` preference).
 
+## 3a. Local AI stays local
+
+- Ollama has no authentication, so ULTRON Core only connects to it on the
+  same machine: `127.0.0.1`, `localhost`, `::1`, `host.docker.internal` or
+  the Compose `ollama` service. Any other address is refused and reported
+  ("not on this machine") in status, readiness and `check-config`.
+- A backend with `ULTRON_DEPLOYMENT=cloud` never uses local AI, so a
+  deployed server can't silently try to reach an Ollama it can't secure.
+- The only exception is deliberate: `ULTRON_OLLAMA_ALLOW_REMOTE=true` **and**
+  an `https` address (e.g. a remote Ollama behind an authenticating TLS
+  proxy). Plain `http` to another host is always refused.
+- Apps never talk to Ollama; they only talk to ULTRON Core. Ollama stays on
+  its default `127.0.0.1:11434`; never set `OLLAMA_HOST=0.0.0.0`.
+
 ## 4. AI output is never executed
 
 - Providers receive text and return text. ULTRON never sends tool or
@@ -75,8 +89,10 @@ Users can make every new conversation private by default
   - login: per IP and per email (`ULTRON_LOGIN_RATE_LIMIT_*`) → 429;
   - chat: per user per minute (`ULTRON_CHAT_RATE_LIMIT_PER_MINUTE`, default 20) → 429.
 - One reply at a time per conversation (409 while one is running).
-- Provider calls have connect/read timeouts; a failing provider is put on a
-  cooldown so it isn't hammered.
+- Provider calls have connect/read timeouts, and each reply has a hard time
+  limit (`ULTRON_AI_MAX_REPLY_SECONDS`, default 300); a failing provider is
+  put on a cooldown so it isn't hammered.
+- Local model warm-up is rate-limited (6 per minute per user).
 - If Redis is down, rate limiters fail **open** (logged) so the owner is not
   locked out of a local fallback backend.
 

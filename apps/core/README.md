@@ -36,6 +36,7 @@ src/ultron_core/
 | POST | `/api/v1/conversations/{id}/messages` (JSON or SSE) | Bearer |
 | POST | `/api/v1/conversations/{id}/cancel` | Bearer |
 | GET | `/api/v1/ai/status` | Bearer |
+| POST | `/api/v1/ai/local/warmup` | Bearer |
 | GET / PUT | `/api/v1/ai/preferences` | Bearer |
 
 Setup, tests and Windows instructions: [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md).

@@ -96,6 +96,10 @@ class Settings(BaseSettings):
     ai_context_max_messages: int = Field(default=40, ge=2, le=500)
     # Development-only fake provider: "off", "cloud" or "local".
     ai_dev_mock: Literal["off", "cloud", "local"] = "off"
+    # Hard cap on one reply (seconds), including model loading.
+    ai_max_reply_seconds: float = Field(default=300.0, ge=1, le=3600)
+    # Interval for SSE keep-alive comments while waiting (e.g. model loading).
+    ai_stream_keepalive_seconds: float = Field(default=10.0, gt=0, le=120)
 
     # Cloud providers (all optional). Keys stay on the server, never sent to clients.
     groq_api_key: SecretStr | None = None
@@ -118,7 +122,10 @@ class Settings(BaseSettings):
 
     # Local AI (Ollama). Optional; never assumed to exist.
     ollama_base_url: str | None = None
-    ollama_model: str | None = None
+    ollama_model: str | None = "qwen3.5:4b"
+    # Local AI is restricted to this machine. Set true only for a deliberately
+    # secured remote Ollama reached over https (see docs/SECURITY.md).
+    ollama_allow_remote: bool = False
     # Reasoning ("thinking") for models like Qwen 3.5: "false" (default:
     # fastest replies), "true", "low"/"medium"/"high", or "default" (model's
     # own default). Reasoning text is never shown to the user.

@@ -9,11 +9,13 @@
     3. Ollama itself can generate a reply
     4. ULTRON Core is ready and sees the local model
     5. (Docker) the ULTRON container can reach Ollama on the host
-    6. A real chat through ULTRON (JSON and streamed), labelled "local"
-    7. A private conversation uses only local AI
-    8. Cloud-to-local fallback (temporary second backend whose cloud
+    6. Warm-up: ULTRON loads the model into memory
+    7. A real chat through ULTRON (JSON and streamed, with loading-state
+       events), labelled "local"
+    8. A private conversation uses only local AI
+    9. Cloud-to-local fallback (temporary second backend whose cloud
        provider points at a closed port, so no real or paid cloud call)
-    9. Unavailable-model handling (temporary backend with a model name
+   10. Unavailable-model handling (temporary backend with a model name
        that is not installed)
   Then restores your AI preferences, deletes the test conversations and
   signs the test device out.
@@ -32,7 +34,7 @@
 [CmdletBinding()]
 param(
     [string]$Model = "qwen3.5:4b",
-    [string]$OllamaUrl = "http://localhost:11434",
+    [string]$OllamaUrl = "http://127.0.0.1:11434",
     [string]$ApiUrl = "http://localhost:8000",
     [string]$Email = "",
     [switch]$NoDocker,
@@ -238,6 +240,14 @@ try {
     if ($originalPrefs.cloud_order) { $order = @($originalPrefs.cloud_order) }
     $null = Invoke-Api -Method PUT -Url "$ApiUrl/api/v1/ai/preferences" -Headers $headers -Body @{ mode = "local_only"; cloud_order = $order; private_by_default = [bool]$originalPrefs.private_by_default }
 
+    # Warm-up: load the model before the first chat
+    $r = Invoke-Api -Method POST -Url "$ApiUrl/api/v1/ai/local/warmup" -Headers $headers
+    $ok = ($r.Status -eq 200) -and ($r.Json.status -eq "ready") -and ($r.Json.model -eq $Model)
+    Add-Result "Warm-up loads the model" $ok $(if ($r.Json -and $r.Json.status) { "{0}s, already loaded: {1}" -f $r.Json.seconds, $r.Json.already_loaded } else { "HTTP $($r.Status) $($r.Text)" })
+    $r = Invoke-Api -Url "$ApiUrl/api/v1/ai/status" -Headers $headers
+    $ollama = @($r.Json.providers | Where-Object { $_.name -eq "ollama" })[0]
+    Add-Result "Model reported as loaded" ($ollama.model_loaded -eq $true) ("model_loaded={0}" -f $ollama.model_loaded)
+
     # 7. Real chat through ULTRON
     $cid = New-Conversation $ApiUrl $headers
     $r = Send-Message $ApiUrl $headers $cid "Reply with one short sentence that includes the word ULTRON."
@@ -247,8 +257,11 @@ try {
 
     $r = Send-Message $ApiUrl $headers $cid "Now say it again in different words." $true
     $events = @(([regex]::Matches([string]$r.Text, "(?m)^event: (\S+)")) | ForEach-Object { $_.Groups[1].Value })
+    $phases = @(([regex]::Matches([string]$r.Text, '"phase": "([a-z_]+)"')) | ForEach-Object { $_.Groups[1].Value })
     $ok = ($r.Status -eq 200) -and ($events -contains "provider.selected") -and ($events -contains "delta") -and ($events[-1] -eq "message.completed") -and ([string]$r.Text -match '"kind": "local"')
     Add-Result "Streamed chat via ULTRON" $ok ("{0}s, events: {1} ({2} deltas)" -f $r.Seconds, (($events | Select-Object -Unique) -join " > "), @($events | Where-Object { $_ -eq "delta" }).Count)
+    $ok = ($phases.Count -ge 3) -and ($phases[0] -eq "routing") -and ($phases[-1] -eq "generating")
+    Add-Result "Loading-state events" $ok ("phases: " + ($phases -join " > "))
 
     # 8. Private conversation in normal (auto) mode -> local only
     $null = Invoke-Api -Method PUT -Url "$ApiUrl/api/v1/ai/preferences" -Headers $headers -Body @{ mode = "auto"; cloud_order = $order; private_by_default = [bool]$originalPrefs.private_by_default }

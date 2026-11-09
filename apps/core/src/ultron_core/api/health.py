@@ -72,6 +72,11 @@ async def check_local_ai(request: Request) -> dict[str, Any]:
     local = request.app.state.ai_router.local_providers
     configured = [p for p in local if p.is_configured()]
     if not configured:
+        blocked = next(
+            (p.blocked_reason for p in local if getattr(p, "blocked_reason", None)), None
+        )
+        if blocked:
+            return {"status": "not_configured", "required": False, "reason": blocked}
         return {"status": "not_configured", "required": False}
     provider = configured[0]
     availability = await provider.availability()

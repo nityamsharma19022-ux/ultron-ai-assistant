@@ -216,3 +216,19 @@ async def test_full_chat_api_with_real_local_model(migrated_database) -> None:  
         assert "event: message.completed" in resp.text
         assert '"kind": "local"' in resp.text
         assert '"provider": "custom"' not in resp.text  # cloud never attempted
+
+
+async def test_missing_model_is_not_loaded_and_cannot_warm_up() -> None:
+    provider = ollama(MISSING_MODEL)
+    assert await provider.model_loaded() is False
+    with pytest.raises(ModelNotInstalledError):
+        await provider.warmup()
+
+
+@needs_model
+async def test_warmup_loads_real_model() -> None:
+    provider = ollama(MODEL)
+    started = time.perf_counter()
+    await provider.warmup()
+    assert await provider.model_loaded() is True
+    print(f"\nWarm-up took {time.perf_counter() - started:.1f}s; model is in memory")

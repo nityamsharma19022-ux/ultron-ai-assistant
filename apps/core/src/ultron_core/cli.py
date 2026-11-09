@@ -17,6 +17,17 @@ import sys
 from ultron_core.config import get_settings
 
 
+def _local_ai_summary(s) -> str:  # type: ignore[no-untyped-def]
+    from ultron_core.ai.local_policy import ollama_address_problem
+
+    if not s.ollama_base_url:
+        return "not configured"
+    problem = ollama_address_problem(s)
+    if problem:
+        return f"BLOCKED - {problem}"
+    return f"{s.ollama_base_url} model={s.ollama_model}"
+
+
 def _check_config(_: argparse.Namespace) -> int:
     s = get_settings()
     rows = {
@@ -26,7 +37,7 @@ def _check_config(_: argparse.Namespace) -> int:
         "db_mode": s.db_mode,
         "database_host": s.database_url.split("@")[-1],
         "redis_key_prefix": s.redis_key_prefix,
-        "local_ai": s.ollama_base_url or "not configured",
+        "local_ai": _local_ai_summary(s),
         "log_format": s.log_format,
     }
     for key, value in rows.items():

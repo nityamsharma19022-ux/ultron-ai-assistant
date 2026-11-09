@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from ultron_core.ai.cooldown import CooldownStore
+from ultron_core.ai.local_policy import ollama_address_problem
 from ultron_core.ai.providers.anthropic_provider import AnthropicProvider
 from ultron_core.ai.providers.base import ChatProvider
 from ultron_core.ai.providers.mock import DevMockProvider
@@ -75,6 +76,7 @@ def build_providers(settings: Settings, http: httpx.AsyncClient) -> list[ChatPro
             think=settings.ollama_think,
             num_ctx=settings.ollama_num_ctx,
             keep_alive=settings.ollama_keep_alive,
+            blocked_reason=ollama_address_problem(settings),
         ),
     ]
     if settings.ai_dev_mock != "off":

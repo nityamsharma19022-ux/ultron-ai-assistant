@@ -7,12 +7,71 @@ _Last updated: 2026-11-09_
 | 0 | Architecture docs, Docker Compose (Postgres + Redis), env template | ✅ Done |
 | 1 | ULTRON Core backend foundation | ✅ Done (CI green) |
 | 2 | Intelligence Engine: AI provider router + chat API | ✅ Done (CI green) |
-| 2.1 | Real Ollama integration (Windows, `qwen3.5:4b`) | 🟡 **Built and verified in sandbox; real-model run pending on your PC** |
+| 2.1 | Real Ollama integration (Windows, `qwen3.5:4b`) | 🟡 Built; real-model run pending on your PC |
+| 2.2 | Local AI integration: loading states, warm-up, time limit, local-only guard | 🟡 **Built and tested in sandbox; real-model run pending on your PC** |
 | 3 | Flutter app (Android + Windows), pairing, offline cache/outbox, sync | ⏸ Not started (needs approval) |
 | 4 | Memory (pgvector), voice, reminders | — |
 | 5 | Optional ULTRON-only Supabase project, cloud hosting (not Netlify), edge role | — |
 
 Full plan: [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
+
+---
+
+## Phase 2.2 — Local AI integration (2026-11-09)
+
+Request: "ULTRON Local AI Integration — Phase 1" (Windows 11, Docker Desktop
++ WSL2, Ollama at `http://127.0.0.1:11434`, `qwen3.5:4b`; you verified
+`POST /api/generate` → "ULTRON ONLINE"). Approved plan: option **A**
+(backend only; no frontend yet).
+
+### Audit (before changes)
+| Area | Finding |
+|---|---|
+| Frontend | None in the repo; the Flutter app is Phase 3 (not started). |
+| Backend | ULTRON Core, Python/FastAPI + PostgreSQL + Redis (Docker Compose or run directly). |
+| API | REST `/api/v1` (auth, conversations, messages with SSE streaming, AI status/preferences). |
+| AI | Provider system already had cloud (Groq, Gemini, OpenRouter, custom, Anthropic) and local (Ollama) side by side, cloud-first with local fallback, private → local only. |
+| Gaps | `localhost` instead of `127.0.0.1` (Windows IPv6 issue); no guard against non-local Ollama addresses; no loading feedback while a model loads; no overall reply time limit; default model only in `.env.example`. |
+
+### Changes
+| Change | Details |
+|---|---|
+| Local-only guard | Ollama is used only at `127.0.0.1`, `localhost`, `::1`, `host.docker.internal` or the Compose `ollama` service. Other addresses are refused with a reason (status, readiness, `check-config`). A `cloud` backend never uses local AI. Opt-in for a secured remote Ollama: `ULTRON_OLLAMA_ALLOW_REMOTE=true` **and** `https`. |
+| Defaults | `ULTRON_OLLAMA_MODEL` defaults to `qwen3.5:4b` in code; template/docs use `http://127.0.0.1:11434`; Docker keeps `host.docker.internal`. |
+| Loading states | New SSE `status` events: `routing` → `waiting` / `loading_model` (from Ollama `/api/ps`) → `generating`. Existing events unchanged. |
+| Keep-alive | `: keep-alive` SSE comments every `ULTRON_AI_STREAM_KEEPALIVE_SECONDS` (10) while waiting. |
+| Time limit | `ULTRON_AI_MAX_REPLY_SECONDS` (300). Over the limit → code `timeout` (HTTP 504 when not streaming); partial text saved as `incomplete`. |
+| Warm-up | `POST /api/v1/ai/local/warmup` loads the model (Ollama empty chat); `/ai/status` shows `model_loaded`. Rate-limited 6/min. |
+| Tests | 25 new (`test_local_ai_integration.py`) + 2 live tests; streaming test updated for `status` events. |
+| Windows script | Default `127.0.0.1`; new checks: warm-up, model loaded, loading-state events. |
+| Docs | `WINDOWS_OLLAMA.md` (loading-state table for the app, new settings), `SECURITY.md` §3a, `ARCHITECTURE.md`, core README. |
+
+No database schema changes; existing data and endpoints unchanged.
+
+### Verified in this sandbox
+| Check | Result |
+|---|---|
+| Lint + full suite | ✅ 162 passed, 11 live tests skipped (no `.env`, CI-style: 162 passed) |
+| Real Ollama 0.40.15 runtime (no model) | ✅ `/api/ps` → `{"models":[]}` → `model_loaded = false`; warm-up of an unpulled model → real `404 … not found` → "not installed"; live suite 5 passed / 6 skipped (need the model) |
+| Docker → host via `host.docker.internal` (stand-in Ollama with a 1.5 s "model load") | ✅ status `ready`, `model_loaded: false`; stream: `routing → loading_model → generating`, **3 keep-alives** during the load, 4 deltas, completed; warm-up → `already_loaded: true`; status → `model_loaded: true`; private conversation used local only |
+| Guard | ✅ `192.168.x.x` / public hosts refused with reason; cloud backend refuses local addresses; https + opt-in accepted |
+
+### Not done yet / remaining
+1. **Real `qwen3.5:4b` replies through ULTRON have still not been observed.** The sandbox can't reach your PC or download models. Run the script below; it covers warm-up, chat, streaming with loading states, private, fallback and missing-model checks.
+2. **No user-facing loading UI:** loading states exist in the API only; the app (Phase 3) will display them.
+3. **`host.docker.internal` on real Docker Desktop + WSL2** is expected to work (it is Docker Desktop's documented host address) but was only exercised on Linux here; the script checks it on your PC.
+4. The PowerShell script itself was not executed here (PowerShell can't be installed in this sandbox); its steps were mirrored with bash.
+5. Cancellation and the one-reply-per-conversation lock are per server process (fine for the local backend).
+
+### Windows commands
+
+```powershell
+docker compose up -d --build
+powershell -ExecutionPolicy Bypass -File scripts\windows\Test-UltronOllama.ps1 -Email you@example.com
+```
+
+Existing `.env`: add the new lines from `docs/WINDOWS_OLLAMA.md` §3 first
+(at least `ULTRON_OLLAMA_MODEL=qwen3.5:4b` and the `127.0.0.1` address).
 
 ---
 

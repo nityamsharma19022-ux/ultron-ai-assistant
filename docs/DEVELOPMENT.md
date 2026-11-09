@@ -141,7 +141,7 @@ uv run ultron-core serve --reload
 ```
 
 This uses `ULTRON_LOCAL_DATABASE_URL`, `ULTRON_REDIS_URL` and
-`ULTRON_OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) from the root `.env`.
+`ULTRON_OLLAMA_BASE_URL` (e.g. `http://127.0.0.1:11434`) from the root `.env`.
 
 ## 6. Let the Android app reach the Windows backend
 

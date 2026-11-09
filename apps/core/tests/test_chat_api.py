@@ -28,6 +28,8 @@ pytestmark = pytest.mark.integration
 def parse_sse(body: str) -> list[tuple[str, dict]]:
     events = []
     for block in body.strip().split("\n\n"):
+        if block.startswith(":"):
+            continue  # keep-alive comment
         lines = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
         events.append((lines["event"], json.loads(lines["data"])))
     return events
@@ -80,13 +82,18 @@ async def test_streaming_events(migrated_database) -> None:  # type: ignore[no-u
         names = [e for e, _ in events]
         assert names == [
             "message.created",
+            "status",
+            "status",
             "provider.selected",
+            "status",
             "delta",
             "delta",
             "delta",
             "message.completed",
         ]
-        assert events[1][1]["kind"] == "cloud"
+        phases = [d["phase"] for e, d in events if e == "status"]
+        assert phases == ["routing", "waiting", "generating"]
+        assert events[3][1]["kind"] == "cloud"
         assert "".join(d["text"] for e, d in events if e == "delta") == "Hello from ULTRON"
         assert events[-1][1]["assistant_message"]["status"] == "complete"
 

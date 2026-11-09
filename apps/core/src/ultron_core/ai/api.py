@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException, Request, status
 
+from ultron_core import ratelimit
+from ultron_core.ai.errors import ModelNotInstalledError, ProviderError, ProviderNotConfiguredError
 from ultron_core.ai.router import AIRouter
 from ultron_core.ai.types import ProviderKind
 from ultron_core.chat import service
-from ultron_core.chat.schemas import AIStatus, PreferencesIn, PreferencesOut, ProviderStatus
-from ultron_core.deps import PrincipalDep, SessionDep, SettingsDep
+from ultron_core.chat.schemas import (
+    AIStatus,
+    PreferencesIn,
+    PreferencesOut,
+    ProviderStatus,
+    WarmupResult,
+)
+from ultron_core.deps import PrincipalDep, RedisDep, SessionDep, SettingsDep
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -33,6 +43,10 @@ async def ai_status(
             state = "unavailable"
         else:
             state = "ready"
+        loaded = None
+        check = getattr(provider, "model_loaded", None)
+        if state == "ready" and check is not None:
+            loaded = await check()
         items.append(
             ProviderStatus(
                 name=provider.name,
@@ -43,6 +57,7 @@ async def ai_status(
                 status=state,
                 reason=availability.reason,
                 cooldown_remaining_seconds=round(cooldown.remaining) if cooldown else None,
+                model_loaded=loaded,
             )
         )
     local_ready = any(i.available for i in items if i.kind == ProviderKind.LOCAL.value)
@@ -92,3 +107,37 @@ async def put_preferences(
     session.add(prefs)
     await session.commit()
     return _prefs_out(prefs, ai_router)
+
+
+@router.post("/local/warmup", response_model=WarmupResult)
+async def warmup_local_model(
+    request: Request, principal: PrincipalDep, settings: SettingsDep, redis: RedisDep
+) -> WarmupResult:
+    """Load the local model into memory so the first reply starts quickly.
+
+    The app can call this at startup or when the user opens a chat."""
+    if not await ratelimit.allow(
+        redis, settings, bucket="warmup", identity=str(principal.user.id), limit=6, window=60
+    ):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many warm-up requests")
+    ai_router: AIRouter = request.app.state.ai_router
+    provider = next((p for p in ai_router.local_providers if hasattr(p, "warmup")), None)
+    if provider is None or not provider.is_configured():
+        reason = provider.missing_configuration() if provider else "no local AI provider"
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Local AI is not set up: {reason}")
+    started = time.perf_counter()
+    try:
+        already = await provider.warmup()  # type: ignore[attr-defined]
+    except ModelNotInstalledError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc
+    except ProviderNotConfiguredError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=exc.message) from exc
+    except ProviderError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.message) from exc
+    return WarmupResult(
+        status="ready",
+        provider=provider.name,
+        model=provider.model,
+        already_loaded=already,
+        seconds=round(time.perf_counter() - started, 2),
+    )
