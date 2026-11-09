@@ -44,6 +44,11 @@ pytest      → 125 passed (67 unit, 58 integration) — 49 from Phase 1, 76 new
 CI-style run (no .env, env-var URLs only) → 125 passed
 ```
 
+GitHub Actions CI run #2 (commit `a2d71e1`): ✅ **success**: lint, 125
+tests on fresh Postgres/Redis, and the Docker image built from the
+committed Dockerfile.
+<https://github.com/nityamsharma19022-ux/ultron-ai-assistant/actions/runs/42650362198>
+
 Requested scenarios → tests:
 
 | Scenario | Covered by |
@@ -103,7 +108,7 @@ Requested scenarios → tests:
   single-process local backend; Redis-based for cloud hosting in Phase 5).
 - The Docker image in this sandbox was again built from a copy of the
   Dockerfile that only adds the sandbox proxy CA to the build stage; the
-  committed Dockerfile is unchanged (CI builds it).
+  committed Dockerfile is unchanged and CI built it successfully.
 
 ---
 
