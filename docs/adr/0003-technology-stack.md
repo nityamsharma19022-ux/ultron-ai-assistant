@@ -1,13 +1,13 @@
 # ADR-0003: Technology stack
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted (approved 2026-11-09)
 - **Date:** 2026-11-09
 
 ## Context
 ULTRON targets Android and Windows, must favour free/open-source tools, and
 needs strong AI/speech library support.
 
-## Decision (proposed)
+## Decision
 - **Client:** Flutter (one codebase for Android + Windows), SQLite via
   drift for offline storage.
 - **Backend:** Python 3.12 + FastAPI, SQLAlchemy 2 + Alembic, arq for

@@ -1,73 +1,149 @@
 # ULTRON local development
 
-Phase 0 gives you a local PostgreSQL + Redis stack for ULTRON. No cloud
-account is needed.
+The local backend (PostgreSQL, Redis, ULTRON Core and, optionally, a local
+AI runtime) runs on your Windows PC. No cloud account is needed.
 
 ## Prerequisites
-- **Docker** — Docker Desktop on Windows (WSL 2 backend) or Docker Engine
-  on Linux. Docker Compose v2 is included.
-- **Git**
+- **Docker Desktop** (Windows, WSL 2 backend) or Docker Engine (Linux).
+- **Git**.
+- For running the backend outside Docker or running tests:
+  [uv](https://docs.astral.sh/uv/) (it installs Python 3.13 for you).
+- Optional local AI: [Ollama](https://ollama.com) (native Windows install
+  recommended for GPU access).
 
 ## 1. Create your ULTRON `.env`
+
+PowerShell:
+```powershell
+Copy-Item .env.example .env
+```
 
 macOS / Linux / Git Bash:
 ```bash
 cp .env.example .env
 ```
 
-Windows PowerShell:
-```powershell
-Copy-Item .env.example .env
-```
+Then edit `.env`:
+- Replace `change-me-postgres` and `change-me-redis` (in the password lines
+  **and** the `_URL` lines). Use letters, digits, `-` and `_` only.
+- Set `ULTRON_JWT_SECRET` to a random value:
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(48))"
+  ```
 
-Open `.env` and replace `change-me-postgres` and `change-me-redis` with
-your own passwords (in the password fields **and** in the two `_URL` lines).
-`.env` is git-ignored; never commit it.
+`.env` is git-ignored. Never commit it.
 
-## 2. Start the stack
+## 2. Start the local backend (Docker)
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 ```bash
 docker compose ps
 ```
 
-Both `ultron-postgres` and `ultron-redis` should show `healthy`.
+`ultron-postgres`, `ultron-redis` and `ultron-core` should all be `healthy`.
+Migrations are applied automatically on start (local database only).
 
-## 3. Check the services
-
-PostgreSQL (should list `vector` and `pg_trgm`):
+Check it:
 ```bash
-docker compose exec postgres psql -U ultron -d ultron -c "\dx"
+curl http://localhost:8000/health/ready
 ```
 
-Redis (should reply `PONG`):
+API docs (development only): <http://localhost:8000/docs>
+
+## 3. Create the owner account (once)
+
 ```bash
-docker compose exec redis redis-cli ping
+docker compose exec core ultron-core create-owner --email you@example.com
 ```
 
-From your host, the services are at:
+You'll be asked for a password (at least 12 characters). Then log in:
 
-| Service | Address |
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"YOUR-PASSWORD\",\"device_name\":\"My PC\",\"platform\":\"windows\"}"
+```
+
+## 4. Local AI on Windows (optional)
+
+**Recommended — native Ollama:** install Ollama for Windows, then pull a model:
+```powershell
+ollama pull llama3.2
+```
+The Docker backend reaches it at `http://host.docker.internal:11434`
+(already the default). `/health/ready` reports it under `checks.local_ai`.
+
+**Alternative — Ollama in Docker:**
+```bash
+docker compose --profile local-ai up -d
+```
+and set `ULTRON_CORE_OLLAMA_BASE_URL=http://ollama:11434` in `.env`.
+
+Local AI is optional: if it's missing, readiness still passes.
+
+## 5. Run the backend without Docker (Windows native)
+
+Keep Postgres and Redis in Docker:
+```powershell
+docker compose up -d postgres redis
+```
+
+Then, from `apps\core`:
+```powershell
+uv sync
+```
+
+```powershell
+uv run ultron-core migrate
+```
+
+```powershell
+uv run ultron-core serve --reload
+```
+
+This uses `ULTRON_LOCAL_DATABASE_URL`, `ULTRON_REDIS_URL` and
+`ULTRON_OLLAMA_BASE_URL` (e.g. `http://localhost:11434`) from the root `.env`.
+
+## 6. Let the Android app reach the Windows backend
+
+By default the API listens on `127.0.0.1` (this PC only). For the phone on
+the same Wi-Fi:
+
+1. Set `ULTRON_CORE_BIND_HOST=0.0.0.0` in `.env` and run
+   `docker compose up -d`.
+2. Allow inbound TCP 8000 for **private** networks only in Windows Firewall.
+3. Use `http://<your-PC-LAN-IP>:8000` in the app (Phase 3 adds pairing with
+   certificate pinning).
+
+PostgreSQL and Redis always stay on `127.0.0.1`.
+
+## 7. Run the tests
+
+With Postgres and Redis running (`docker compose up -d postgres redis`),
+from `apps/core`:
+
+```bash
+uv run pytest
+```
+
+```bash
+uv run ruff check src tests
+```
+
+Integration tests use a separate `ultron_test` database (recreated on every
+run) and Redis keys prefixed `ultron-test:`. Your real data isn't touched.
+Unit tests only: `uv run pytest -m "not integration"`.
+
+## 8. Useful commands
+
+| Task | Command |
 |---|---|
-| PostgreSQL | `localhost:5433` (database `ultron`, user `ultron`) |
-| Redis | `localhost:6380` |
-
-Both listen on `127.0.0.1` only.
-
-## 4. Stop / reset
-
-Stop (keeps data):
-```bash
-docker compose down
-```
-
-Delete **all ULTRON local data** (only ULTRON volumes are affected):
-```bash
-docker compose down -v
-```
+| Show active config (no secrets) | `docker compose exec core ultron-core check-config` |
+| Logs | `docker compose logs -f core` |
+| New migration | `uv run alembic revision --autogenerate -m "describe change"` (in `apps/core`) |
+| Stop (keep data) | `docker compose down` |
+| Delete all ULTRON local data | `docker compose down -v` |
 
 ## Using Valkey instead of Redis
 Add to `.env`:
@@ -76,9 +152,6 @@ ULTRON_REDIS_IMAGE=valkey/valkey:8-alpine
 ULTRON_REDIS_SERVER_CMD=valkey-server
 ```
 
-## Connecting Supabase later (optional)
-1. Create a **new** Supabase project dedicated to ULTRON (never reuse
-   another project's).
-2. Fill the `ULTRON_SUPABASE_*` values in `.env`.
-3. Set `ULTRON_DB_MODE=supabase`.
-4. Run the same migrations used locally.
+## Cloud database (later, optional)
+See [SYNC.md §10](SYNC.md#10-moving-from-the-local-database-to-a-cloud-database-deliberate).
+Never point ULTRON at another project's database.

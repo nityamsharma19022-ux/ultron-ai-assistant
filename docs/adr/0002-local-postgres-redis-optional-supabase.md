@@ -15,9 +15,13 @@ projects or reusing any other project's Supabase instance.
   pg_trgm are available on both.
 - The backend depends only on standard PostgreSQL. Schema changes are
   Alembic migrations that run unchanged on local Postgres or Supabase.
-- Supabase integration is **off by default** (`ULTRON_DB_MODE=local`).
-  When wanted, a **new, ULTRON-only** Supabase project is created and its
-  values go into `ULTRON_SUPABASE_*` variables.
+- Local and cloud databases have **separate settings**
+  (`ULTRON_LOCAL_DATABASE_URL`, `ULTRON_CLOUD_DATABASE_URL`).
+  `ULTRON_DB_MODE=local|cloud` selects exactly one; there is no automatic
+  fallback ([ADR-0005](0005-sync-and-no-automatic-db-switching.md)).
+- Supabase is **off by default** (`ULTRON_DB_MODE=local`). When wanted, a
+  **new, ULTRON-only** Supabase project is created and used as the cloud
+  database.
 
 ## Consequences
 - No Supabase-only features (Auth, Realtime, Storage) are required by the

@@ -1,6 +1,6 @@
 # ADR-0001: Cloud-first, local-fallback
 
-- **Status:** Proposed
+- **Status:** Accepted (approved 2026-11-09)
 - **Date:** 2026-11-09
 
 ## Context

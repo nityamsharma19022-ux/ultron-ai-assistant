@@ -1,13 +1,17 @@
-# ULTRON local development stack: PostgreSQL (with pgvector) + Redis.
+# ULTRON local stack (the "local backend" used on Windows).
+#
+#   postgres  - PostgreSQL 17 + pgvector (local database)
+#   redis     - Redis (cache, rate limits, queues)
+#   core      - ULTRON Core API (FastAPI)
+#   ollama    - optional local AI runtime (profile "local-ai")
 #
 # Everything is namespaced to ULTRON (project name, containers, volumes,
-# network) and bound to 127.0.0.1, so it cannot collide with or be reached
-# by other projects or other machines.
+# network). Postgres and Redis are bound to 127.0.0.1 only.
 #
 # Usage:
-#   cp .env.example .env      # then set your own passwords
-#   docker compose up -d
-#   docker compose ps
+#   cp .env.example .env              # then set your own secrets
+#   docker compose up -d --build      # postgres + redis + core
+#   docker compose --profile local-ai up -d   # also start Ollama in Docker
 
 name: ultron
 
@@ -62,11 +66,58 @@ services:
     networks:
       - ultron
 
+  core:
+    build: ./apps/core
+    image: ultron-core:dev
+    container_name: ultron-core
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ULTRON_DEPLOYMENT: local
+      # Inside the Docker network the services are reached by name.
+      ULTRON_LOCAL_DATABASE_URL: postgresql://${ULTRON_POSTGRES_USER:-ultron}:${ULTRON_POSTGRES_PASSWORD:?Set ULTRON_POSTGRES_PASSWORD in .env}@postgres:5432/${ULTRON_POSTGRES_DB:-ultron}
+      ULTRON_REDIS_URL: redis://default:${ULTRON_REDIS_PASSWORD:?Set ULTRON_REDIS_PASSWORD in .env}@redis:6379/0
+      ULTRON_OLLAMA_BASE_URL: ${ULTRON_CORE_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ULTRON_LOG_FORMAT: ${ULTRON_CORE_LOG_FORMAT:-json}
+      ULTRON_RUN_MIGRATIONS_ON_START: "true"
+    ports:
+      # 127.0.0.1 by default. To let the Android app reach this Windows
+      # backend over Wi-Fi, set ULTRON_CORE_BIND_HOST=0.0.0.0 (see docs).
+      - "${ULTRON_CORE_BIND_HOST:-127.0.0.1}:${ULTRON_CORE_PORT:-8000}:8000"
+    extra_hosts:
+      # Lets the container reach Ollama installed natively on the host.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ultron
+
+  ollama:
+    # Optional. On Windows, installing Ollama natively is usually better
+    # (direct GPU access); then leave this profile off.
+    image: ${ULTRON_OLLAMA_IMAGE:-ollama/ollama:0.40.15}
+    container_name: ultron-ollama
+    profiles: ["local-ai"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ULTRON_OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ultron
+
 volumes:
   postgres_data:
     name: ultron_postgres_data
   redis_data:
     name: ultron_redis_data
+  ollama_data:
+    name: ultron_ollama_data
 
 networks:
   ultron:

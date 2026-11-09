@@ -2,8 +2,8 @@
 
 Advanced personal AI assistant for **Android** and **Windows**.
 
-> **Status:** Phase 0 — foundation. The architecture is **proposed** and
-> awaiting approval before application features are built.
+> **Status:** Phase 1 complete — backend foundation (ULTRON Core) built and
+> tested. See [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
 ## Principles
 - **Free and open source first** — no paid service is required.
@@ -14,15 +14,21 @@ Advanced personal AI assistant for **Android** and **Windows**.
 - **Fully isolated** — no shared config, data, credentials or deployments
   with any other project.
 
+## Stack
+Flutter (Android + Windows) · Python/FastAPI · PostgreSQL 17 + pgvector ·
+Redis · Ollama (local AI) — all free and open source.
+
 ## Quick start
 ```bash
-cp .env.example .env    # then set your own passwords
-docker compose up -d
-docker compose ps
+cp .env.example .env    # then set your own passwords and JWT secret
+docker compose up -d --build
+curl http://localhost:8000/health/ready
 ```
 Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
 ## Documentation
 - [Architecture](docs/ARCHITECTURE.md)
+- [Connectivity, offline mode & sync](docs/SYNC.md)
 - [Local development](docs/DEVELOPMENT.md)
+- [Project status](PROJECT_STATUS.md)
 - [Architecture decision records](docs/adr/)

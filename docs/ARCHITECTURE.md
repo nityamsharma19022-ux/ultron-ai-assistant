@@ -1,7 +1,9 @@
 # ULTRON Architecture
 
-> **Status: PROPOSED — awaiting approval.** Nothing beyond the Phase 0
-> foundation is built yet. Decisions are recorded in [`docs/adr/`](adr/).
+> **Status: APPROVED (2026-11-09).** Phase 1 (backend foundation) is
+> built and tested — see [`PROJECT_STATUS.md`](../PROJECT_STATUS.md).
+> Decisions are recorded in [`docs/adr/`](adr/); connectivity, offline mode
+> and sync are specified in [`docs/SYNC.md`](SYNC.md).
 
 ULTRON is an advanced personal AI assistant for **Android** and **Windows**.
 
@@ -17,8 +19,11 @@ ULTRON is an advanced personal AI assistant for **Android** and **Windows**.
    Docker Compose on the developer machine. No cloud account is needed to
    start.
 4. **Supabase is optional.** ULTRON talks to plain PostgreSQL. A dedicated
-   ULTRON Supabase project can be plugged in later by changing config only.
-5. **Strict project isolation.** ULTRON shares no database, deployment,
+   ULTRON Supabase project can be plugged in later as the cloud database.
+5. **Separate databases, no automatic switching.** Local and cloud database
+   settings are separate; exactly one is used, chosen by config. Moving data
+   follows the sync strategy in [SYNC.md](SYNC.md).
+6. **Strict project isolation.** ULTRON shares no database, deployment,
    credentials or environment variables with any other project
    ([ADR-0004](adr/0004-project-isolation.md)).
 
@@ -97,7 +102,8 @@ Python 3.12 + FastAPI, one deployable service plus a worker process.
 
 **Schema management:** SQLAlchemy 2 + Alembic migrations. The same
 migrations run against local Postgres and a future Supabase project — this
-is what keeps Supabase optional.
+is what keeps Supabase optional. Migrations never run against the cloud
+database unless `ULTRON_ALLOW_CLOUD_MIGRATIONS=true` is set for that command.
 
 ### 3.4 AI provider router
 A single interface (`generate`, `stream`, `embed`, `transcribe`) with
@@ -125,18 +131,19 @@ the router treats them as runtime signals rather than hard-coded numbers.
 | Layer | Cloud (preferred) | Local fallback |
 |---|---|---|
 | AI inference | Cloud LLM providers (free tiers first) | Ollama on the Windows PC / server |
-| Backend reachability | Cloud-hosted ULTRON Core (future) | ULTRON Core on the local PC/LAN → then on-device offline mode |
+| Backend reachability | Cloud-hosted ULTRON Core (future) | Windows local backend on the LAN → then on-device offline mode |
 | Data | Supabase ULTRON project (future, optional) | Local Docker Postgres + Redis (current default) |
 | Client data | Server is source of truth | SQLite cache + outbox, synced on reconnect |
 
-**Not promised:** automatic two-way failover between a cloud database and a
-local database. That needs a sync engine and is out of scope. Server-side
-`ULTRON_DB_MODE` picks **one** primary database; offline resilience comes
-from the client cache + outbox.
+**Databases never fail over automatically.** `ULTRON_DB_MODE` picks **one**
+database per backend. Offline resilience comes from device caches and
+outboxes, synced with idempotent operations when connectivity returns
+([SYNC.md](SYNC.md), [ADR-0005](adr/0005-sync-and-no-automatic-db-switching.md)).
 
 **Platform notes**
-- *Windows:* can run the full stack locally (Docker Desktop + Ollama),
-  so it gets a complete local fallback.
+- *Windows:* runs the full local backend (Docker Desktop: Postgres, Redis,
+  ULTRON Core) and local AI models (Ollama, native install recommended for
+  GPU, or the `local-ai` Compose profile).
 - *Android:* cannot run Docker. Its fallback is the PC/LAN backend, then
   offline mode (cached data, queued actions, on-device TTS/STT). An
   on-device small model can be evaluated later.
@@ -145,11 +152,16 @@ from the client cache + outbox.
 - All settings come from environment variables prefixed `ULTRON_`.
 - `.env.example` (committed, placeholders only) → copy to `.env`
   (git-ignored).
-- `ULTRON_DB_MODE=local|supabase` selects the database.
+- `ULTRON_DB_MODE=local|cloud` selects the database
+  (`ULTRON_LOCAL_DATABASE_URL` / `ULTRON_CLOUD_DATABASE_URL`).
 - No secrets in code, Docker images, or git history.
 
 ## 6. Security (single-user personal assistant)
-- Device pairing: each device gets its own revocable token (JWT).
+- One owner account created from the CLI; Argon2id password hashing.
+- Per-device short-lived JWT access tokens + rotating refresh tokens with
+  reuse detection; devices can be revoked instantly
+  ([ADR-0006](adr/0006-authentication.md)).
+- Login rate limiting in Redis.
 - Local services bind to `127.0.0.1` only; LAN exposure for the Android
   app will be designed explicitly in Phase 3.
 - Private-mode requests never reach cloud providers.
@@ -177,16 +189,17 @@ from the client cache + outbox.
 ```
 ultron-ai-assistant/
 ├── apps/
-│   ├── core/            # ULTRON Core backend (Python, FastAPI)   [Phase 1]
-│   └── client/          # ULTRON App (Flutter: Android + Windows) [Phase 3]
-├── infra/
-│   └── postgres/init/   # Local DB bootstrap (extensions only)    [done]
-├── docs/
-│   ├── ARCHITECTURE.md  # This document                           [done]
-│   ├── DEVELOPMENT.md   # Local setup                             [done]
-│   └── adr/             # Architecture decision records           [done]
-├── docker-compose.yml   # Local Postgres + Redis                  [done]
-└── .env.example         # ULTRON-only config template             [done]
+│   ├── core/                 # ULTRON Core backend (Python, FastAPI)  [Phase 1 ✓]
+│   │   ├── src/ultron_core/  # app, config, auth, db, migrations
+│   │   ├── tests/            # unit + integration tests
+│   │   └── Dockerfile
+│   └── client/               # ULTRON App (Flutter: Android + Windows) [Phase 3]
+├── infra/postgres/init/      # Local DB bootstrap (extensions only)
+├── docs/                     # Architecture, sync design, ADRs, setup
+├── .github/workflows/        # CI (lint, tests, image build)
+├── docker-compose.yml        # Local backend: Postgres, Redis, Core (+ Ollama)
+├── .env.example              # ULTRON-only config template
+└── PROJECT_STATUS.md         # Current phase and test results
 ```
 
 ## 9. Delivery phases
@@ -194,13 +207,14 @@ ultron-ai-assistant/
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation: docs, Docker Compose (Postgres + Redis), env template, repo hygiene | **Done** |
-| 1 | ULTRON Core skeleton: config loading, health endpoint, DB + Redis connections, Alembic, tests, CI | Awaiting approval |
-| 2 | AI provider router (cloud free tier → Ollama fallback) + basic chat API with streaming | — |
-| 3 | Flutter app (Windows + Android): chat UI, device pairing, offline cache/outbox | — |
+| 1 | ULTRON Core: config, health, Postgres, Redis, migrations, auth, logging, tests, CI, Docker | **Done** |
+| 2 | AI provider router (cloud free tier → Ollama fallback) + basic chat API with streaming | Next (awaiting go-ahead) |
+| 3 | Flutter app (Windows + Android): chat UI, device pairing, backend selection, offline cache/outbox, sync endpoints | — |
 | 4 | Long-term memory (pgvector), voice (STT/TTS), reminders/workers | — |
 | 5 | Optional: connect a new ULTRON Supabase project; choose cloud hosting (not Netlify) | — |
 
 ## 10. Explicitly out of scope (by decision)
 - Creating a Supabase project now.
 - Any access to, or reuse of, other projects' Supabase or Netlify resources.
-- Deploying ULTRON to Netlify.
+- Deploying ULTRON to Netlify, or using Netlify at all.
+- Automatic switching between databases.
