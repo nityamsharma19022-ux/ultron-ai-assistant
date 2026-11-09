@@ -59,6 +59,11 @@ healthy; migrations applied on start (and safely re-run on restart);
 and `/auth/me` work; password never appears in logs; cloud mode skips
 automatic migrations.
 
+GitHub Actions CI (run #1, commit `558a3e6`): ✅ **success**: lint +
+49 tests on fresh Postgres/Redis services, and the Docker image built from
+the committed Dockerfile.
+<https://github.com/nityamsharma19022-ux/ultron-ai-assistant/actions/runs/42622453068>
+
 ### Issues found and fixed during testing
 - Owner accounts with private domains (e.g. `me@ultron.local`) could be
   created but not log in (login used strict email validation). Both now use
@@ -69,10 +74,8 @@ automatic migrations.
 - **Docker image in this sandbox:** Docker Hub rate-limited this cloud
   sandbox and its HTTPS proxy needs a custom CA, so the image was built with
   a temporary copy of the Dockerfile that only adds that CA in the build
-  stage. The committed `apps/core/Dockerfile` is unchanged and builds
-  normally on a regular machine; CI also builds it.
-- **CI** (`.github/workflows/core-ci.yml`) has not run yet. It runs on the
-  next push to GitHub.
+  stage. The committed `apps/core/Dockerfile` is unchanged, and GitHub
+  Actions built it successfully (see below).
 - **Windows:** the PowerShell steps in `docs/DEVELOPMENT.md` haven't been
   run on a real Windows machine yet (this sandbox runs Linux).
 - Sync endpoints, client outbox and LAN TLS pinning are designed
