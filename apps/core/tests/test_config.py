@@ -86,3 +86,19 @@ def test_secrets_are_not_exposed_in_repr() -> None:
     s = make(local_database_url=LOCAL)
     assert SECRET not in repr(s)
     assert "u:p@" not in repr(s)
+
+
+def test_env_example_loads_and_enables_no_cloud_provider_by_default() -> None:
+    from pathlib import Path
+
+    import httpx
+
+    from ultron_core.ai.registry import build_providers
+
+    example = Path(__file__).resolve().parents[3] / ".env.example"
+    s = Settings(_env_file=example)  # type: ignore[call-arg]
+    assert s.db_mode == "local"
+    assert s.ai_dev_mock == "off"
+    providers = build_providers(s, httpx.AsyncClient())
+    # No keys in the template: no cloud provider (free or paid) is active.
+    assert [p.name for p in providers if p.is_configured()] == []

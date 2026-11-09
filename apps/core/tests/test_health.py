@@ -66,10 +66,12 @@ async def test_not_ready_when_redis_down(migrated_database) -> None:  # type: ig
 
 
 async def test_local_ai_is_optional(migrated_database) -> None:  # type: ignore[no-untyped-def]
-    settings = make_test_settings(ollama_base_url="http://127.0.0.1:1")
+    settings = make_test_settings(ollama_base_url="http://127.0.0.1:1", ollama_model="llama3.2")
     resp = await _get(settings, "/health/ready")
     assert resp.status_code == 200
-    assert resp.json()["checks"]["local_ai"]["status"] == "unavailable"
+    local_ai = resp.json()["checks"]["local_ai"]
+    assert local_ai["status"] == "unavailable"
+    assert "not running" in local_ai["reason"]
 
 
 async def test_liveness_survives_dependency_outage(migrated_database) -> None:  # type: ignore[no-untyped-def]

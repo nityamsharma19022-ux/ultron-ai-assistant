@@ -84,8 +84,45 @@ class Settings(BaseSettings):
     login_rate_limit_attempts: int = Field(default=10, ge=1)
     login_rate_limit_window_seconds: int = Field(default=300, ge=10)
 
-    # --- Optional local AI (reported in readiness, used from Phase 2) ----
+    # --- AI routing (cloud-first, local-fallback) -------------------------
+    # Default order in which cloud providers are tried. Providers without an
+    # API key + model are skipped automatically.
+    ai_cloud_providers: str = "groq,gemini,openrouter,custom,anthropic"
+    ai_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
+    ai_request_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    ai_max_output_tokens: int = Field(default=2048, ge=64, le=32_000)
+    ai_cloud_context_chars: int = Field(default=48_000, ge=2_000, le=2_000_000)
+    ai_local_context_chars: int = Field(default=16_000, ge=2_000, le=500_000)
+    ai_context_max_messages: int = Field(default=40, ge=2, le=500)
+    # Development-only fake provider: "off", "cloud" or "local".
+    ai_dev_mock: Literal["off", "cloud", "local"] = "off"
+
+    # Cloud providers (all optional). Keys stay on the server, never sent to clients.
+    groq_api_key: SecretStr | None = None
+    groq_model: str | None = None
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str | None = None
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    openrouter_api_key: SecretStr | None = None
+    openrouter_model: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    custom_ai_api_key: SecretStr | None = None
+    custom_ai_model: str | None = None
+    custom_ai_base_url: str | None = None
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str | None = "claude-opus-5-5"
+    anthropic_max_tokens: int = Field(default=16_000, ge=256, le=128_000)
+    anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    anthropic_base_url: str | None = None
+
+    # Local AI (Ollama). Optional; never assumed to exist.
     ollama_base_url: str | None = None
+    ollama_model: str | None = None
+
+    # --- Chat ---------------------------------------------------------------
+    chat_max_message_chars: int = Field(default=12_000, ge=100, le=100_000)
+    chat_rate_limit_per_minute: int = Field(default=20, ge=1, le=1000)
 
     @model_validator(mode="after")
     def _validate(self) -> Settings:
@@ -104,11 +141,22 @@ class Settings(BaseSettings):
         looks_placeholder = any(m in secret.lower() for m in _INSECURE_SECRET_MARKERS)
         if self.env == "production" and looks_placeholder:
             raise ValueError("ULTRON_JWT_SECRET looks like a placeholder; set a real secret.")
+        if self.env == "production" and self.ai_dev_mock != "off":
+            raise ValueError("ULTRON_AI_DEV_MOCK must be 'off' in production.")
         if not self.redis_key_prefix.startswith("ultron"):
             raise ValueError(
                 "ULTRON_REDIS_KEY_PREFIX must start with 'ultron' to keep keys isolated."
             )
         return self
+
+    @property
+    def cloud_provider_order(self) -> list[str]:
+        return [n.strip().lower() for n in self.ai_cloud_providers.split(",") if n.strip()]
+
+    @property
+    def private_conversations_allowed(self) -> bool:
+        """Private chats are stored only by a local backend using a local database."""
+        return self.deployment == "local" and self.db_mode == "local"
 
     @property
     def database_url(self) -> str:

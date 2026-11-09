@@ -1,7 +1,9 @@
 # ULTRON Architecture
 
-> **Status: APPROVED (2026-11-09).** Phase 1 (backend foundation) is
-> built and tested — see [`PROJECT_STATUS.md`](../PROJECT_STATUS.md).
+> **Status: APPROVED (2026-11-09).** Phases 1 (backend foundation) and 2
+> (Intelligence Engine) are built and tested — see
+> [`PROJECT_STATUS.md`](../PROJECT_STATUS.md) and the
+> [roadmap](DEVELOPMENT_ROADMAP.md). Security: [`SECURITY.md`](SECURITY.md).
 > Decisions are recorded in [`docs/adr/`](adr/); connectivity, offline mode
 > and sync are specified in [`docs/SYNC.md`](SYNC.md).
 
@@ -105,23 +107,71 @@ migrations run against local Postgres and a future Supabase project — this
 is what keeps Supabase optional. Migrations never run against the cloud
 database unless `ULTRON_ALLOW_CLOUD_MIGRATIONS=true` is set for that command.
 
-### 3.4 AI provider router
-A single interface (`generate`, `stream`, `embed`, `transcribe`) with
-pluggable providers, tried in a configurable order:
+### 3.4 AI provider router (built in Phase 2)
+Code: `apps/core/src/ultron_core/ai/`. Decision: [ADR-0007](adr/0007-ai-provider-router.md).
 
-1. **Cloud, free tier** — e.g. Google Gemini API, Groq, OpenRouter free
-   models (each optional, enabled only when its key is set).
-2. **Cloud, paid (optional)** — e.g. Anthropic Claude, OpenAI. Off unless
-   configured.
-3. **Local fallback** — Ollama with an open-weight model
-   (e.g. Llama / Qwen / Gemma; check each model's licence).
+```mermaid
+flowchart TD
+    R[New user message] --> P{Conversation private?}
+    P -- yes --> L
+    P -- no --> M{User mode}
+    M -- local_only --> L
+    M -- auto / cloud_only --> C[Cloud providers in preferred order<br/>skip: no key, cooldown, offline]
+    C -- reply --> OK[Reply labelled cloud]
+    C -- all failed --> X{mode = auto?}
+    X -- yes --> L[Local model<br/>only if really installed]
+    X -- no --> E[Clear error]
+    L -- reply --> OKL[Reply labelled local]
+    L -- not available --> E
+```
 
-Fallback triggers: no network, timeout, HTTP 429 / quota exhausted,
-provider error, or request flagged **private** (private requests go
-local-only and never leave the machine). Free-tier limits change often, so
-the router treats them as runtime signals rather than hard-coded numbers.
+| Provider | Adapter | Cost |
+|---|---|---|
+| Groq, Google Gemini, OpenRouter, custom | OpenAI-compatible HTTP (httpx) | Free tiers (optional) |
+| Anthropic Claude | Official `anthropic` SDK, server-side refusal fallback | Paid (optional) |
+| Ollama | Native `/api/chat`, `/api/tags` | Free, local |
+| Dev mock | In-process | Development only |
 
-### 3.5 Speech
+- **Failure categories** drive routing: not configured, auth, rate limited,
+  quota exhausted, unavailable, offline, model not installed, invalid
+  request, refused. Rate limits/quota/outages put a provider on a cooldown
+  (Redis).
+- **Offline:** a connection failure skips the remaining cloud providers and
+  goes straight to local AI.
+- **Honest local AI:** Ollama counts as available only when the configured
+  model is actually installed (`/api/tags`).
+- **Private:** local only, never cloud ([SECURITY.md](SECURITY.md) §3).
+- **No stitching:** if a provider fails after text has streamed, the reply
+  is saved as `incomplete`, not continued by another model.
+- **Labelling:** every reply stores and returns provider, `cloud`/`local`,
+  model, `fallback_used` and the attempts made.
+
+### 3.5 Chat system (built in Phase 2)
+Code: `apps/core/src/ultron_core/chat/`.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST/GET /api/v1/conversations` | Create (optionally private) / list |
+| `GET/PATCH/DELETE /api/v1/conversations/{id}` | Read with messages / rename or make private / delete (tombstone) |
+| `POST /api/v1/conversations/{id}/messages` | Send; JSON reply, or SSE stream with `"stream": true` |
+| `POST /api/v1/conversations/{id}/cancel` | Stop the reply being generated |
+| `GET /api/v1/ai/status` | Which providers can answer now (no secrets) |
+| `GET/PUT /api/v1/ai/preferences` | Mode, cloud order, private by default |
+
+- **Streaming (SSE):** `message.created` → `provider.selected` → `delta`… →
+  `message.completed` | `message.cancelled` | `error`.
+- **Context:** completed messages only, newest first until the provider's
+  character budget (cloud 48k, local 16k by default) or 40 messages; never
+  starts with an assistant turn; same-role turns merged.
+- **Generation:** each reply runs as its own task; cancelling the task (the
+  cancel endpoint or a client disconnect) stores the partial reply as
+  `cancelled`. One reply at a time per conversation.
+- **Message states:** `streaming`, `complete`, `incomplete`, `failed`,
+  `cancelled`; replies left `streaming` by a crash are marked failed at startup.
+- **Tables:** `conversations`, `messages` (ordered by `seq`),
+  `user_ai_preferences` (migration `0002`).
+
+### 3.6 Speech
 - Speech-to-text: **faster-whisper** (MIT), runs locally; cloud STT optional.
 - Text-to-speech: **Piper** (open source; verify the current fork's licence
   at adoption); Android/Windows built-in TTS as zero-cost fallback.
@@ -208,8 +258,8 @@ ultron-ai-assistant/
 |---|---|---|
 | 0 | Foundation: docs, Docker Compose (Postgres + Redis), env template, repo hygiene | **Done** |
 | 1 | ULTRON Core: config, health, Postgres, Redis, migrations, auth, logging, tests, CI, Docker | **Done** |
-| 2 | AI provider router (cloud free tier → Ollama fallback) + basic chat API with streaming | Next (awaiting go-ahead) |
-| 3 | Flutter app (Windows + Android): chat UI, device pairing, backend selection, offline cache/outbox, sync endpoints | — |
+| 2 | AI provider router (cloud free tier → Ollama fallback) + chat API with streaming | **Done** |
+| 3 | Flutter app (Windows + Android): chat UI, device pairing, backend selection, offline cache/outbox, sync endpoints | Awaiting approval |
 | 4 | Long-term memory (pgvector), voice (STT/TTS), reminders/workers | — |
 | 5 | Optional: connect a new ULTRON Supabase project; choose cloud hosting (not Netlify) | — |
 

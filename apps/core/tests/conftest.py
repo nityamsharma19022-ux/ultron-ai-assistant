@@ -13,8 +13,9 @@ Override with ULTRON_TEST_DATABASE_URL / ULTRON_TEST_REDIS_URL (used in CI).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
@@ -25,6 +26,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
+from ultron_core.ai.providers.base import ChatProvider
 from ultron_core.config import Settings
 from ultron_core.db import migrate
 from ultron_core.main import create_app
@@ -69,8 +71,17 @@ def make_test_settings(**overrides: object) -> Settings:
         "redis_url": redis_url,
         "redis_key_prefix": TEST_REDIS_PREFIX,
         "jwt_secret": TEST_JWT_SECRET,
-        "ollama_base_url": None,
         "login_rate_limit_attempts": 5,
+        # Tests must never call a real (possibly paid) AI provider, even if the
+        # developer's .env contains API keys.
+        "groq_api_key": None,
+        "gemini_api_key": None,
+        "openrouter_api_key": None,
+        "custom_ai_api_key": None,
+        "anthropic_api_key": None,
+        "ollama_base_url": None,
+        "ollama_model": None,
+        "ai_dev_mock": "off",
         "log_level": "WARNING",
     }
     values.update(overrides)
@@ -109,7 +120,12 @@ def migrated_database(test_settings: Settings) -> Settings:
 
 async def _reset_state(app: FastAPI) -> None:
     async with app.state.engine.begin() as conn:
-        await conn.execute(text("TRUNCATE users, devices, refresh_tokens CASCADE"))
+        await conn.execute(
+            text(
+                "TRUNCATE users, devices, refresh_tokens, conversations, messages, "
+                "user_ai_preferences CASCADE"
+            )
+        )
     keys = [k async for k in app.state.redis.scan_iter(match=f"{TEST_REDIS_PREFIX}*")]
     if keys:
         await app.state.redis.delete(*keys)
@@ -161,3 +177,27 @@ async def login(
 
 def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+@contextlib.asynccontextmanager
+async def running_app(
+    settings: Settings, providers: Sequence[ChatProvider] | None = None
+) -> AsyncIterator[tuple[FastAPI, httpx.AsyncClient]]:
+    """A started app (with optional fake AI providers) and a client for it."""
+    application = create_app(settings, ai_providers=list(providers) if providers else None)
+    async with LifespanManager(application):
+        await _reset_state(application)
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://ultron.test") as c:
+            yield application, c
+        await _reset_state(application)
+
+
+async def owner_headers(application: FastAPI, client: httpx.AsyncClient) -> dict[str, str]:
+    from ultron_core.auth.service import create_owner
+
+    async with application.state.sessionmaker() as session:
+        await create_owner(session, OWNER_EMAIL, OWNER_PASSWORD, "Owner")
+    resp = await login(client)
+    assert resp.status_code == 200, resp.text
+    return bearer(resp.json()["access_token"])

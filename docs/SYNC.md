@@ -138,6 +138,13 @@ Nothing is ever discarded silently.
    `ULTRON_ALLOW_CLOUD_MIGRATIONS=true` for that one command, and the Docker
    container never auto-migrates a cloud database.
 
+## 9a. Private conversations
+
+Private conversations (AI on local models only) are stored only by a local
+backend with a local database and are **never pushed to a cloud primary**.
+When the cloud/edge split arrives (Phase 5), the edge keeps them local and
+excludes them from its outbox to the cloud. See [SECURITY.md](SECURITY.md) §3.
+
 ## 10. Moving from the local database to a cloud database (deliberate)
 
 Done once, when a cloud ULTRON project exists (Phase 5):

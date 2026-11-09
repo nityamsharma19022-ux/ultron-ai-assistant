@@ -78,6 +78,10 @@ def configure_logging(level: str = "INFO", fmt: str = "console") -> None:
         logging.getLogger(name).handlers = []
         logging.getLogger(name).propagate = True
     logging.getLogger("sqlalchemy.engine").setLevel("WARNING")
+    # HTTP client libraries log full request URLs at INFO; keep them quiet so
+    # provider endpoints and query strings never end up in logs.
+    for name in ("httpx", "httpx2", "httpcore", "anthropic"):
+        logging.getLogger(name).setLevel("WARNING")
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

@@ -2,8 +2,9 @@
 
 Advanced personal AI assistant for **Android** and **Windows**.
 
-> **Status:** Phase 1 complete — backend foundation (ULTRON Core) built and
-> tested. See [PROJECT_STATUS.md](PROJECT_STATUS.md).
+> **Status:** Phase 2 complete — backend with cloud-first / local-fallback
+> AI chat. See [PROJECT_STATUS.md](PROJECT_STATUS.md) and the
+> [roadmap](docs/DEVELOPMENT_ROADMAP.md).
 
 ## Principles
 - **Free and open source first** — no paid service is required.
@@ -29,6 +30,8 @@ Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 ## Documentation
 - [Architecture](docs/ARCHITECTURE.md)
 - [Connectivity, offline mode & sync](docs/SYNC.md)
+- [Security](docs/SECURITY.md)
+- [Roadmap](docs/DEVELOPMENT_ROADMAP.md)
 - [Local development](docs/DEVELOPMENT.md)
 - [Project status](PROJECT_STATUS.md)
 - [Architecture decision records](docs/adr/)

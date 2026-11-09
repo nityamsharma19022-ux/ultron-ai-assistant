@@ -65,12 +65,47 @@ You'll be asked for a password (at least 12 characters). Then log in:
 curl -X POST http://localhost:8000/api/v1/auth/login -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"YOUR-PASSWORD\",\"device_name\":\"My PC\",\"platform\":\"windows\"}"
 ```
 
-## 4. Local AI on Windows (optional)
+## 4. AI providers
+
+ULTRON tries cloud AI first (free tiers first) and falls back to local AI.
+Configure any you like in `.env` (all optional):
+
+| Provider | Variables | Notes |
+|---|---|---|
+| Groq | `ULTRON_GROQ_API_KEY`, `ULTRON_GROQ_MODEL` | Free tier |
+| Google Gemini | `ULTRON_GEMINI_API_KEY`, `ULTRON_GEMINI_MODEL` | Free tier |
+| OpenRouter | `ULTRON_OPENROUTER_API_KEY`, `ULTRON_OPENROUTER_MODEL` | Use a `:free` model |
+| Custom | `ULTRON_CUSTOM_AI_BASE_URL`, `_API_KEY`, `_MODEL` | Any OpenAI-compatible API |
+| Anthropic | `ULTRON_ANTHROPIC_API_KEY` (model defaults to `claude-opus-5-5`) | **Paid** |
+
+Restart the backend after editing `.env`
+(`docker compose up -d core`). Check what is usable:
+
+```bash
+curl -H "Authorization: Bearer <access token>" http://localhost:8000/api/v1/ai/status
+```
+
+**No keys yet?** Set `ULTRON_AI_DEV_MOCK=cloud` (or `local`) to get a fake
+provider that echoes your message: handy for building the app. Never in
+production.
+
+**Chat quick test:**
+```bash
+curl -X POST http://localhost:8000/api/v1/conversations -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d "{}"
+```
+
+```bash
+curl -N -X POST http://localhost:8000/api/v1/conversations/<id>/messages -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d "{\"content\":\"Hello\",\"stream\":true}"
+```
+
+## 4b. Local AI on Windows (optional)
 
 **Recommended — native Ollama:** install Ollama for Windows, then pull a model:
 ```powershell
 ollama pull llama3.2
 ```
+`ULTRON_OLLAMA_MODEL` must name a model you have pulled (default
+`llama3.2`); ULTRON reports local AI as available only when it is installed.
 The Docker backend reaches it at `http://host.docker.internal:11434`
 (already the default). `/health/ready` reports it under `checks.local_ai`.
 

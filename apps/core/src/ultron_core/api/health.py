@@ -66,17 +66,23 @@ async def check_redis(request: Request, limit_seconds: float) -> dict[str, Any]:
     return {"status": "ok", "latency_ms": _ms(start)}
 
 
-async def check_local_ai(request: Request, base_url: str | None) -> dict[str, Any]:
-    if not base_url:
+async def check_local_ai(request: Request) -> dict[str, Any]:
+    """Optional: reports whether a local model is really installed. Never
+    affects readiness."""
+    local = request.app.state.ai_router.local_providers
+    configured = [p for p in local if p.is_configured()]
+    if not configured:
         return {"status": "not_configured", "required": False}
-    start = time.perf_counter()
-    try:
-        resp = await request.app.state.http.get(f"{base_url.rstrip('/')}/api/version", timeout=2.0)
-        resp.raise_for_status()
-        version = resp.json().get("version")
-    except Exception as exc:
-        return {"status": "unavailable", "required": False, "error": type(exc).__name__}
-    return {"status": "ok", "required": False, "version": version, "latency_ms": _ms(start)}
+    provider = configured[0]
+    availability = await provider.availability()
+    if not availability.available:
+        return {
+            "status": "unavailable",
+            "required": False,
+            "model": provider.model,
+            "reason": availability.reason,
+        }
+    return {"status": "ok", "required": False, "model": provider.model}
 
 
 @router.get("/live")
@@ -97,7 +103,7 @@ async def ready(request: Request, response: Response, settings: SettingsDep) -> 
     db, redis, local_ai = await asyncio.gather(
         check_database(request, settings.db_connect_timeout_seconds),
         check_redis(request, settings.redis_timeout_seconds),
-        check_local_ai(request, settings.ollama_base_url),
+        check_local_ai(request),
     )
     is_ready = db["status"] == "ok" and redis["status"] == "ok"
     if not is_ready:
