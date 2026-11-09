@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../auth/token_store.dart';
 import 'api_exception.dart';
+import 'idle_timeout.dart';
 import 'models.dart';
 import 'sse.dart';
 
@@ -199,12 +200,10 @@ class UltronApi {
       jsonEncode({'content': content, 'stream': true}),
       abort,
     );
-    final bytes = response.stream.timeout(
+    final bytes = withIdleTimeout<List<int>>(
+      response.stream,
       streamIdleTimeout,
-      onTimeout: (sink) {
-        sink.addError(const ApiException('The connection to ULTRON was lost.', code: 'stream_stalled'));
-        sink.close();
-      },
+      () => const ApiException('The connection to ULTRON was lost.', code: 'stream_stalled'),
     );
     try {
       await for (final e in parseSse(bytes)) {

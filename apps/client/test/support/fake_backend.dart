@@ -91,6 +91,140 @@ class FakeBackend {
     ],
   };
 
+  // ------------------------------------------------------------ chat
+  final conversations = <Map<String, dynamic>>[];
+  final messages = <String, List<Map<String, dynamic>>>{};
+  int cancelCalls = 0;
+  int _ids = 0;
+
+  /// SSE events for the next reply: (event, data). Use [defaultReply].
+  List<(String, Map<String, dynamic>)> Function(String conversationId, String content)? replyScript;
+
+  /// When set, the stream pauses after the status events until completed.
+  Completer<void>? holdReply;
+
+  /// Status code to answer the message POST with instead of streaming.
+  int? messageStatus;
+  Map<String, dynamic>? messageError;
+
+  String nextId() => '00000000-0000-0000-0000-${(++_ids).toString().padLeft(12, '0')}';
+
+  Map<String, dynamic> message(String role, String content, {String status = 'complete', String? kind, String? provider, String? model, String? id, String? errorCode}) => {
+    'id': id ?? nextId(),
+    'role': role,
+    'content': content,
+    'status': status,
+    'provider': provider,
+    'provider_kind': kind,
+    'model': model,
+    'fallback_used': false,
+    'error_code': errorCode,
+    'created_at': '2026-11-09T10:00:00Z',
+  };
+
+  Map<String, dynamic> addConversation({String? title, bool private = false}) {
+    final c = {
+      'id': nextId(),
+      'title': title,
+      'is_private': private,
+      'created_at': '2026-11-09T10:00:00Z',
+      'updated_at': '2026-11-09T10:00:00Z',
+    };
+    conversations.insert(0, c);
+    messages[c['id'] as String] = [];
+    return c;
+  }
+
+  static List<(String, Map<String, dynamic>)> defaultReply(String assistantId, {String kind = 'local'}) => [
+    ('status', {'phase': 'routing'}),
+    ('status', {'phase': 'loading_model', 'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'model_loaded': false}),
+    ('provider.selected', {'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'fallback_used': false, 'attempts': []}),
+    ('status', {'phase': 'generating', 'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b'}),
+    ('delta', {'text': 'Hello'}),
+    ('delta', {'text': ' from'}),
+    ('delta', {'text': ' ULTRON'}),
+  ];
+
+  Future<http.StreamedResponse> _messages(http.BaseRequest r, String conversationId, String body) async {
+    if (messageStatus != null) return json(messageStatus!, {'detail': messageError ?? 'error'});
+    final content = (jsonDecode(body) as Map)['content'] as String;
+    final user = message('user', content);
+    final assistantId = nextId();
+    messages[conversationId]!.add(user);
+    final c = conversations.firstWhere((x) => x['id'] == conversationId);
+    c['title'] ??= content;
+    final script = replyScript?.call(conversationId, content) ?? defaultReply(assistantId);
+    final hold = holdReply;
+    final controller = StreamController<List<int>>();
+    String sse(String e, Map<String, dynamic> d) => 'event: $e\ndata: ${jsonEncode(d)}\n\n';
+    () async {
+      controller.add(utf8.encode(sse('message.created', {
+        'user_message': user,
+        'assistant_message_id': assistantId,
+        'private': c['is_private'],
+      })));
+      final text = StringBuffer();
+      String? kind;
+      var cancelled = false;
+      for (final (e, d) in script) {
+        if (e == 'delta' && hold != null && !hold.isCompleted) {
+          await hold.future;
+          cancelled = cancelCalls > 0;
+          if (cancelled) break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        if (e == 'delta') text.write(d['text']);
+        if (e == 'provider.selected') kind = d['kind'] as String?;
+        controller.add(utf8.encode(sse(e, d)));
+        if (e == 'error') {
+          await controller.close();
+          return;
+        }
+      }
+      final final_ = message('assistant', text.toString(),
+          id: assistantId, status: cancelled ? 'cancelled' : 'complete', kind: kind, provider: kind == null ? null : 'ollama', model: kind == null ? null : 'qwen3.5:4b');
+      messages[conversationId]!.add(final_);
+      controller.add(utf8.encode(cancelled
+          ? sse('message.cancelled', {'assistant_message': final_, 'routing': null})
+          : sse('message.completed', {'assistant_message': final_, 'routing': {'kind': kind}})));
+      await controller.close();
+    }();
+    return http.StreamedResponse(controller.stream, 200, headers: {'content-type': 'text/event-stream'});
+  }
+
+  Future<http.StreamedResponse>? _chat(http.BaseRequest r, String body) {
+    final path = r.url.path;
+    final m = RegExp(r'^/api/v1/conversations/([^/]+)(/messages|/cancel)?$').firstMatch(path);
+    if (path == '/api/v1/conversations' && r.method == 'GET') return Future.value(json(200, conversations));
+    if (path == '/api/v1/conversations' && r.method == 'POST') {
+      final b = body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
+      return Future.value(json(201, addConversation(title: b['title'] as String?, private: b['is_private'] == true)));
+    }
+    if (m == null) return null;
+    final id = m.group(1)!;
+    final c = conversations.where((x) => x['id'] == id).firstOrNull;
+    if (c == null) return Future.value(json(404, {'detail': 'Conversation not found'}));
+    switch ((r.method, m.group(2))) {
+      case ('GET', null):
+        return Future.value(json(200, {'conversation': c, 'messages': messages[id]}));
+      case ('PATCH', null):
+        final b = jsonDecode(body) as Map<String, dynamic>;
+        if (b['is_private'] == true) c['is_private'] = true;
+        if (b['title'] != null) c['title'] = b['title'];
+        return Future.value(json(200, c));
+      case ('DELETE', null):
+        conversations.remove(c);
+        return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+      case ('POST', '/messages'):
+        return _messages(r, id, body);
+      case ('POST', '/cancel'):
+        cancelCalls++;
+        if (holdReply != null && !holdReply!.isCompleted) holdReply!.complete();
+        return Future.value(json(202, {'status': 'cancelling'}));
+    }
+    return null;
+  }
+
   Future<http.StreamedResponse> _handle(http.BaseRequest r, String body) async {
     final path = r.url.path;
     switch ('${r.method} $path') {
@@ -119,6 +253,8 @@ class FakeBackend {
         return http.StreamedResponse(const Stream.empty(), 204);
     }
     if (!authorized(r)) return json(401, {'detail': 'Not authenticated'});
+    final chat = _chat(r, body);
+    if (chat != null) return chat;
     switch ('${r.method} $path') {
       case 'GET /api/v1/auth/me':
         return json(200, me);

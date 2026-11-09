@@ -5,6 +5,7 @@ import 'core/auth/session.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/ultron_theme.dart';
 import 'features/auth/login_screen.dart';
+import 'features/chat/chat_page.dart';
 import 'features/shell/app_shell.dart';
 import 'features/shell/sections.dart';
 import 'widgets/glass_panel.dart';
@@ -38,9 +39,12 @@ class UltronApp extends ConsumerWidget {
   }
 }
 
-/// Placeholder pages; replaced by the real screens in later increments.
+/// Section pages. Dashboard and settings are placeholders until their
+/// increment lands.
 Map<AppSection, Widget> defaultPages() => {
-  for (final s in AppSection.values) s: _ComingSoon(section: s),
+  AppSection.chat: const ChatPage(),
+  AppSection.dashboard: const _ComingSoon(section: AppSection.dashboard),
+  AppSection.settings: const _ComingSoon(section: AppSection.settings),
 };
 
 class _ComingSoon extends StatelessWidget {
