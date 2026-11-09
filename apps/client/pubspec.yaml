@@ -1,0 +1,46 @@
+name: ultron_app
+description: "ULTRON personal AI assistant (Windows and Android)."
+publish_to: 'none'
+version: 0.3.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # State management (MIT)
+  flutter_riverpod: 3.4.3
+  # HTTP + streaming (BSD-3)
+  http: ^1.6.0
+  # Login tokens: Windows Credential Manager / Android Keystore (BSD-3)
+  flutter_secure_storage: ^11.1.1
+  # Non-secret UI settings (BSD-3)
+  shared_preferences: ^2.5.3
+  # Voice, using the device's own speech engines (BSD-3 / MIT)
+  speech_to_text: ^7.4.0
+  flutter_tts: ^4.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    # SIL Open Font License 1.1 (licence files in assets/fonts)
+    - family: Orbitron
+      fonts:
+        - asset: assets/fonts/Orbitron-500.ttf
+          weight: 500
+        - asset: assets/fonts/Orbitron-700.ttf
+          weight: 700
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-400.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-500.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-600.ttf
+          weight: 600
