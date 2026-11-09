@@ -1,0 +1,73 @@
+# ULTRON local development stack: PostgreSQL (with pgvector) + Redis.
+#
+# Everything is namespaced to ULTRON (project name, containers, volumes,
+# network) and bound to 127.0.0.1, so it cannot collide with or be reached
+# by other projects or other machines.
+#
+# Usage:
+#   cp .env.example .env      # then set your own passwords
+#   docker compose up -d
+#   docker compose ps
+
+name: ultron
+
+services:
+  postgres:
+    # PostgreSQL 17 + pgvector: same major version and extensions as Supabase,
+    # so a dedicated ULTRON Supabase project can be connected later.
+    image: ${ULTRON_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
+    container_name: ultron-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ULTRON_POSTGRES_DB:-ultron}
+      POSTGRES_USER: ${ULTRON_POSTGRES_USER:-ultron}
+      POSTGRES_PASSWORD: ${ULTRON_POSTGRES_PASSWORD:?Set ULTRON_POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${ULTRON_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ultron
+
+  redis:
+    # Redis 8 (AGPLv3 option). Valkey (BSD) is a drop-in alternative:
+    # set ULTRON_REDIS_IMAGE=valkey/valkey:8-alpine and
+    # ULTRON_REDIS_SERVER_CMD=valkey-server in .env.
+    image: ${ULTRON_REDIS_IMAGE:-redis:8-alpine}
+    container_name: ultron-redis
+    restart: unless-stopped
+    environment:
+      ULTRON_REDIS_PASSWORD: ${ULTRON_REDIS_PASSWORD:?Set ULTRON_REDIS_PASSWORD in .env}
+      ULTRON_REDIS_SERVER_CMD: ${ULTRON_REDIS_SERVER_CMD:-redis-server}
+      REDISCLI_AUTH: ${ULTRON_REDIS_PASSWORD:?Set ULTRON_REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - exec "$$ULTRON_REDIS_SERVER_CMD" --requirepass "$$ULTRON_REDIS_PASSWORD" --appendonly yes
+    ports:
+      - "127.0.0.1:${ULTRON_REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping 2>/dev/null || valkey-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ultron
+
+volumes:
+  postgres_data:
+    name: ultron_postgres_data
+  redis_data:
+    name: ultron_redis_data
+
+networks:
+  ultron:
+    name: ultron_network

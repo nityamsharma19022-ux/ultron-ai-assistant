@@ -1,0 +1,48 @@
+# --- Secrets: never commit. Only .env.example is tracked. ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+key.properties
+secrets/
+
+# --- Guard against accidentally linking other platforms' projects ---
+.netlify/
+.vercel/
+supabase/.temp/
+supabase/.branches/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Flutter / Dart / Android ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.gradle/
+local.properties
+*.iml
+
+# --- Node (tooling) ---
+node_modules/
+
+# --- Editors / OS ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.log

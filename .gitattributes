@@ -1,0 +1,11 @@
+# Normalise line endings so files edited on Windows still work inside
+# Linux containers (shell scripts and SQL init files must stay LF).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.jar binary
