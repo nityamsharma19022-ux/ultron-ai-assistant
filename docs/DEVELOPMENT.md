@@ -100,12 +100,15 @@ curl -N -X POST http://localhost:8000/api/v1/conversations/<id>/messages -H "Aut
 
 ## 4b. Local AI on Windows (optional)
 
+Full Windows guide with tests and troubleshooting: [WINDOWS_OLLAMA.md](WINDOWS_OLLAMA.md).
+
+
 **Recommended — native Ollama:** install Ollama for Windows, then pull a model:
 ```powershell
-ollama pull llama3.2
+ollama pull qwen3.5:4b
 ```
 `ULTRON_OLLAMA_MODEL` must name a model you have pulled (default
-`llama3.2`); ULTRON reports local AI as available only when it is installed.
+`qwen3.5:4b`); ULTRON reports local AI as available only when it is installed.
 The Docker backend reaches it at `http://host.docker.internal:11434`
 (already the default). `/health/ready` reports it under `checks.local_ai`.
 

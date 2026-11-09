@@ -6,12 +6,81 @@ _Last updated: 2026-11-09_
 |---|---|---|
 | 0 | Architecture docs, Docker Compose (Postgres + Redis), env template | ✅ Done |
 | 1 | ULTRON Core backend foundation | ✅ Done (CI green) |
-| 2 | Intelligence Engine: AI provider router + chat API | ✅ **Done — tested, awaiting review** |
+| 2 | Intelligence Engine: AI provider router + chat API | ✅ Done (CI green) |
+| 2.1 | Real Ollama integration (Windows, `qwen3.5:4b`) | 🟡 **Built and verified in sandbox; real-model run pending on your PC** |
 | 3 | Flutter app (Android + Windows), pairing, offline cache/outbox, sync | ⏸ Not started (needs approval) |
 | 4 | Memory (pgvector), voice, reminders | — |
 | 5 | Optional ULTRON-only Supabase project, cloud hosting (not Netlify), edge role | — |
 
 Full plan: [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
+
+---
+
+## Phase 2.1 — Real Ollama integration (Windows, `qwen3.5:4b`)
+
+Target: Ollama at `http://localhost:11434` on Windows, model `qwen3.5:4b`,
+ULTRON Core (FastAPI) in Docker or run directly.
+
+### Changes
+| Area | Change |
+|---|---|
+| Model config | `.env.example`: `ULTRON_OLLAMA_MODEL=qwen3.5:4b`, `ULTRON_OLLAMA_BASE_URL=http://localhost:11434` (direct run), `ULTRON_CORE_OLLAMA_BASE_URL=http://host.docker.internal:11434` (Docker) |
+| Thinking models | Qwen 3.5 can reason before answering. ULTRON now sends `think` explicitly (`ULTRON_OLLAMA_THINK`, default `false` for fast replies). Reasoning is never shown: the `thinking` field is ignored and inline `<think>…</think>` blocks are stripped. A reply that is only reasoning (output limit hit) is reported as an error instead of an empty answer. |
+| Context size | Sends `num_ctx` (`ULTRON_OLLAMA_NUM_CTX`, default 8192). Ollama's own default is 4096 tokens (confirmed on Ollama 0.40.15), which would silently cut off history. |
+| Model lifetime | Optional `ULTRON_OLLAMA_KEEP_ALIVE`. |
+| Errors | Real Ollama `404 model '…' not found` → "not installed"; unsupported `think` → clear config error; out-of-memory → clear message. |
+| Security | Ollama stays on `127.0.0.1`; Docker reaches it via `host.docker.internal`; docs say not to set `OLLAMA_HOST=0.0.0.0`; the Windows test checks Ollama isn't listening on the network. |
+| Tests | 12 new adapter tests; new live suite `tests/test_ollama_live.py` (9 tests, `-m ollama_live`, skipped unless `ULTRON_TEST_OLLAMA_URL` is set). |
+| Windows tooling | `scripts/windows/Test-UltronOllama.ps1` (end-to-end check, PowerShell 5.1 and 7), `docs/WINDOWS_OLLAMA.md` (exact commands, troubleshooting). |
+
+### Actual results (2026-11-09)
+
+This cloud session cannot reach your PC (no Remote Control folder is
+shared), and the sandbox's network policy blocks downloading models from
+`registry.ollama.ai`, so **`qwen3.5:4b` itself has not run yet**. What was
+verified here:
+
+| # | Task | Result here | Evidence |
+|---|---|---|---|
+| 1 | Verify Ollama provider | ✅ | Reviewed; 2 issues fixed (no `think` / no `num_ctx` sent). 37 adapter tests pass. |
+| 2 | Model name `qwen3.5:4b` | ✅ | Tag matched exactly; `.env.example` and template test updated. |
+| 3 | Ollama API connection | ✅ real runtime | Real **Ollama 0.40.15**: `/api/version`, `/api/tags`, `/api/chat` and `/api/show` responses checked; 4 live tests pass against it. |
+| 3b | Docker → host connection | ✅ (sandbox) | Container reached a host service through `host.docker.internal`; readiness showed `local_ai: ok, model: qwen3.5:4b`. |
+| 4 | Real chat through ULTRON | ✅ protocol / 🟡 real model | Full stack (HTTP → router → Ollama protocol) with a sandbox fake Ollama: JSON and streamed replies labelled `ollama` / `qwen3.5:4b` / local. Request sent to Ollama: `think: false`, `num_ctx: 8192`, no tools. |
+| 5 | Response generation | 🟡 pending on PC | Needs the real model: run the script or live suite below. |
+| 6 | Cloud → local fallback | ✅ (fake local) | Temporary backend with an unreachable cloud provider: `custom = offline → ollama = ok`, `fallback_used: true`. Same commands as the Windows script. |
+| 7 | Private, local only | ✅ (fake local) | Private chat in `auto` mode: only `ollama` attempted. |
+| 8 | Unavailable model | ✅ real runtime | Real Ollama returns `404 model 'qwen3.5:4b' not found` → ULTRON reports "not installed"; status `local_ai_available: false`; readiness `unavailable`; chat `no_ai_available`; private `private_requires_local_ai`. |
+
+Test totals: **137 passed** (default suite) + live suite **4 passed /
+5 skipped** against the real runtime (the 5 need the model). All 9 live
+tests also pass against the sandbox fake, which confirms the test code
+itself.
+
+### To finish on Windows (exact commands)
+
+From the repository folder in PowerShell, with Ollama running:
+
+```powershell
+docker compose up -d --build
+powershell -ExecutionPolicy Bypass -File scripts\windows\Test-UltronOllama.ps1 -Email you@example.com
+```
+
+Optional developer suite (from `apps\core`):
+
+```powershell
+$env:ULTRON_TEST_OLLAMA_URL = "http://localhost:11434"
+$env:ULTRON_TEST_OLLAMA_MODEL = "qwen3.5:4b"
+uv run pytest -m ollama_live -v -s
+```
+
+Full guide: [docs/WINDOWS_OLLAMA.md](docs/WINDOWS_OLLAMA.md). Paste the
+script's summary table back and this section will be updated with the real
+model's results.
+
+**Note:** the PowerShell script could not be executed here (PowerShell
+can't be installed in this sandbox). Its steps were verified with an
+equivalent bash run against the same Docker setup.
 
 ---
 

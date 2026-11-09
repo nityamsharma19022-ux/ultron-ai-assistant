@@ -101,4 +101,9 @@ def test_env_example_loads_and_enables_no_cloud_provider_by_default() -> None:
     assert s.ai_dev_mock == "off"
     providers = build_providers(s, httpx.AsyncClient())
     # No keys in the template: no cloud provider (free or paid) is active.
-    assert [p.name for p in providers if p.is_configured()] == []
+    assert [p.name for p in providers if p.is_configured() and p.kind.value == "cloud"] == []
+    # Local AI is pre-set for the owner's Windows setup (Ollama + qwen3.5:4b).
+    local = next(p for p in providers if p.name == "ollama")
+    assert local.model == "qwen3.5:4b"
+    assert s.ollama_base_url == "http://localhost:11434"
+    assert (s.ollama_think, s.ollama_num_ctx) == ("false", 8192)

@@ -119,6 +119,14 @@ class Settings(BaseSettings):
     # Local AI (Ollama). Optional; never assumed to exist.
     ollama_base_url: str | None = None
     ollama_model: str | None = None
+    # Reasoning ("thinking") for models like Qwen 3.5: "false" (default:
+    # fastest replies), "true", "low"/"medium"/"high", or "default" (model's
+    # own default). Reasoning text is never shown to the user.
+    ollama_think: Literal["false", "true", "low", "medium", "high", "default"] = "false"
+    # Context window sent to Ollama (tokens). Ollama's own default can be 4096.
+    ollama_num_ctx: int | None = Field(default=8192, ge=1024, le=1_048_576)
+    # How long Ollama keeps the model loaded after a request, e.g. "10m".
+    ollama_keep_alive: str | None = None
 
     # --- Chat ---------------------------------------------------------------
     chat_max_message_chars: int = Field(default=12_000, ge=100, le=100_000)

@@ -46,6 +46,7 @@ asyncio_default_test_loop_scope = "function"
 addopts = "-ra"
 markers = [
     "integration: needs the local ULTRON PostgreSQL and Redis (docker compose up -d)",
+    "ollama_live: talks to a real Ollama (set ULTRON_TEST_OLLAMA_URL; skipped otherwise)",
 ]
 
 [tool.ruff]

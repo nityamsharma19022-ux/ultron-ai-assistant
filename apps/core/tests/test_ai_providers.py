@@ -388,3 +388,136 @@ async def test_anthropic_without_key_is_not_configured() -> None:
     assert provider.is_configured() is False
     with pytest.raises(errors.ProviderNotConfiguredError):
         await collect(provider)
+
+
+# --- Ollama: thinking models (e.g. Qwen 3.5), context size, empty answers -----------
+
+
+async def test_ollama_sends_think_and_context_settings() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        done = {"message": {"content": "ok"}, "done": True, "done_reason": "stop"}
+        return httpx.Response(200, content=json.dumps(done).encode())
+
+    provider = OllamaProvider(
+        http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        base_url="http://ollama.test:11434",
+        model="qwen3.5:4b",
+        context_char_budget=16_000,
+        connect_timeout=1,
+        read_timeout=5,
+        think="false",
+        num_ctx=8192,
+        keep_alive="10m",
+    )
+    await collect(provider)
+    body = seen["body"]
+    assert body["model"] == "qwen3.5:4b"
+    assert body["think"] is False
+    assert body["options"] == {"num_predict": 256, "num_ctx": 8192}
+    assert body["keep_alive"] == "10m"
+
+
+@pytest.mark.parametrize(("setting", "expected"), [("true", True), ("high", "high")])
+async def test_ollama_think_levels(setting, expected) -> None:  # type: ignore[no-untyped-def]
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, content=b'{"message":{"content":"x"},"done":true}')
+
+    provider = ollama_provider(handler)
+    provider._think = __import__("ultron_core.ai.providers.ollama", fromlist=["x"]).think_value(
+        setting
+    )
+    await collect(provider)
+    assert seen["body"]["think"] == expected
+
+
+async def test_ollama_default_think_setting_omits_the_field() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, content=b'{"message":{"content":"x"},"done":true}')
+
+    provider = OllamaProvider(
+        http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        base_url="http://o.test",
+        model="m",
+        context_char_budget=1000,
+        connect_timeout=1,
+        read_timeout=5,
+        think="default",
+        num_ctx=None,
+    )
+    await collect(provider)
+    assert "think" not in seen["body"]
+    assert "num_ctx" not in seen["body"]["options"]
+
+
+async def test_ollama_reasoning_field_is_never_shown() -> None:
+    lines = [
+        {"message": {"role": "assistant", "content": "", "thinking": "secret plan"}, "done": False},
+        {"message": {"content": "", "thinking": " more"}, "done": False},
+        {"message": {"content": "Answer"}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "stop"},
+    ]
+    body = "\n".join(json.dumps(x) for x in lines).encode()
+    text, _ = await collect(ollama_provider(lambda r: httpx.Response(200, content=body)))
+    assert text == "Answer"
+
+
+@pytest.mark.parametrize(
+    "chunks",
+    [
+        ["<think>plan", " more</think>", "\n\nHello", " there"],
+        ["<th", "ink>plan</th", "ink>Hello there"],
+        ["  <think>", "x</think>Hello there"],
+    ],
+)
+async def test_ollama_inline_think_tags_are_removed(chunks) -> None:  # type: ignore[no-untyped-def]
+    lines = [{"message": {"content": c}, "done": False} for c in chunks]
+    lines.append({"message": {"content": ""}, "done": True})
+    body = "\n".join(json.dumps(x) for x in lines).encode()
+    text, _ = await collect(ollama_provider(lambda r: httpx.Response(200, content=body)))
+    assert text == "Hello there"
+
+
+async def test_ollama_text_starting_with_angle_bracket_is_kept() -> None:
+    lines = [{"message": {"content": "<b>bold</b> text"}, "done": False}, {"done": True}]
+    body = "\n".join(json.dumps(x) for x in lines).encode()
+    text, _ = await collect(ollama_provider(lambda r: httpx.Response(200, content=body)))
+    assert text == "<b>bold</b> text"
+
+
+async def test_ollama_only_thinking_then_length_limit_is_an_error() -> None:
+    lines = [
+        {"message": {"content": "", "thinking": "long reasoning"}, "done": False},
+        {"message": {"content": ""}, "done": True, "done_reason": "length"},
+    ]
+    body = "\n".join(json.dumps(x) for x in lines).encode()
+    with pytest.raises(errors.ProviderUnavailableError) as err:
+        await collect(ollama_provider(lambda r: httpx.Response(200, content=body)))
+    assert "output limit" in err.value.message
+
+
+async def test_ollama_real_runtime_404_body_maps_to_model_not_installed() -> None:
+    # Exact body returned by Ollama 0.40.15 for a model that isn't pulled.
+    provider = ollama_provider(
+        lambda r: httpx.Response(404, json={"error": "model 'qwen3.5:4b' not found"})
+    )
+    with pytest.raises(errors.ModelNotInstalledError) as err:
+        await collect(provider)
+    assert "is not installed" in err.value.message
+
+
+async def test_ollama_think_not_supported_is_a_clear_request_error() -> None:
+    provider = ollama_provider(
+        lambda r: httpx.Response(400, json={"error": '"m" does not support thinking'})
+    )
+    with pytest.raises(errors.ProviderRequestError) as err:
+        await collect(provider)
+    assert "ULTRON_OLLAMA_THINK" in err.value.message

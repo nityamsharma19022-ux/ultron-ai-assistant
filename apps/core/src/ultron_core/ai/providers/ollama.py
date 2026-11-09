@@ -26,6 +26,8 @@ from ultron_core.ai.types import (
 )
 
 _AVAILABILITY_TTL_SECONDS = 10.0
+_MAX_ERROR_BODY = 2048
+THINK_SETTINGS = ("false", "true", "low", "medium", "high", "default")
 
 
 def model_matches(configured: str, installed: str) -> bool:
@@ -33,6 +35,58 @@ def model_matches(configured: str, installed: str) -> bool:
     if configured == installed:
         return True
     return ":" not in configured and installed == f"{configured}:latest"
+
+
+def think_value(setting: str) -> bool | str | None:
+    """Map ULTRON_OLLAMA_THINK to Ollama's ``think`` field (None = omit)."""
+    return {"false": False, "true": True, "default": None}.get(setting, setting)
+
+
+class _InlineThinkFilter:
+    """Hide a leading ``<think>…</think>`` block if a model puts its reasoning
+    inside the answer text (older runtimes/imported models). Ollama normally
+    returns reasoning in a separate ``thinking`` field, which is ignored."""
+
+    OPEN, CLOSE = "<think>", "</think>"
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._state = "start"  # start -> (thinking -> after_think ->) answer
+
+    def feed(self, text: str) -> str:
+        if self._state == "answer":
+            return text
+        if self._state == "after_think":
+            # Drop the blank lines a model puts between reasoning and answer.
+            text = text.lstrip()
+            if text:
+                self._state = "answer"
+            return text
+        self._buffer += text
+        if self._state == "start":
+            stripped = self._buffer.lstrip()
+            if not stripped:
+                return ""
+            if len(stripped) < len(self.OPEN) and self.OPEN.startswith(stripped):
+                return ""  # could still become "<think>": wait for more
+            if not stripped.startswith(self.OPEN):
+                self._state = "answer"
+                out, self._buffer = self._buffer, ""
+                return out
+            self._state = "thinking"
+        end = self._buffer.find(self.CLOSE)
+        if end == -1:
+            return ""
+        rest = self._buffer[end + len(self.CLOSE) :]
+        self._buffer = ""
+        self._state = "after_think"
+        return self.feed(rest)
+
+    def flush(self) -> str:
+        # An unfinished "<think" prefix that never completed is real text.
+        out = self._buffer if self._state == "start" else ""
+        self._buffer = ""
+        return out
 
 
 class OllamaProvider(ChatProvider):
@@ -47,15 +101,21 @@ class OllamaProvider(ChatProvider):
         context_char_budget: int,
         connect_timeout: float,
         read_timeout: float,
+        think: str = "false",
+        num_ctx: int | None = 8192,
+        keep_alive: str | None = None,
         name: str = "ollama",
     ) -> None:
         self.name = name
         self._http = http
         self._base_url = (base_url or "").rstrip("/")
-        self.model = model
+        self.model = (model or "").strip() or None
         self.context_char_budget = context_char_budget
         self._timeout = httpx.Timeout(read_timeout, connect=connect_timeout)
-        self._probe_timeout = httpx.Timeout(2.0, connect=min(connect_timeout, 2.0))
+        self._probe_timeout = httpx.Timeout(3.0, connect=min(connect_timeout, 3.0))
+        self._think = think_value(think)
+        self._num_ctx = num_ctx
+        self._keep_alive = keep_alive
         self._cached: tuple[float, Availability] | None = None
 
     def is_configured(self) -> bool:
@@ -98,29 +158,58 @@ class OllamaProvider(ChatProvider):
             )
         return Availability(True, None, {"installed_models": models[:20]})
 
-    async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
-        if not self.is_configured():
-            raise ProviderNotConfiguredError(f"{self.name}: {self.missing_configuration()}")
+    def _payload(self, request: ChatRequest) -> dict[str, object]:
         messages = [{"role": "system", "content": request.system}]
         messages += [{"role": m.role, "content": m.content} for m in request.messages]
-        payload = {
+        options: dict[str, object] = {"num_predict": request.max_output_tokens}
+        if self._num_ctx:
+            # Ollama's default context can be as small as 4096 tokens, which
+            # would silently cut off conversation history.
+            options["num_ctx"] = self._num_ctx
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
             "stream": True,
-            "options": {"num_predict": request.max_output_tokens},
+            "options": options,
+            # No "tools": replies are text only.
         }
+        if self._think is not None:
+            payload["think"] = self._think
+        if self._keep_alive:
+            payload["keep_alive"] = self._keep_alive
+        return payload
+
+    async def _raise_for_status(self, resp: httpx.Response) -> None:
+        if resp.status_code < 400:
+            return
+        body = (await resp.aread())[:_MAX_ERROR_BODY].decode("utf-8", "replace").lower()
+        if resp.status_code == 404 or "not found" in body:
+            self.invalidate()
+            raise ModelNotInstalledError(f"local model '{self.model}' is not installed")
+        if "think" in body:
+            raise ProviderRequestError(
+                "the local model does not support the ULTRON_OLLAMA_THINK setting"
+            )
+        if "memory" in body:
+            raise ProviderUnavailableError("local model could not be loaded (not enough memory)")
+        if resp.status_code >= 500:
+            raise ProviderUnavailableError("local AI runtime error")
+        raise ProviderRequestError("local AI rejected the request")
+
+    async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
+        if not self.is_configured():
+            raise ProviderNotConfiguredError(f"{self.name}: {self.missing_configuration()}")
         end = StreamEnd(model=self.model)
+        think_filter = _InlineThinkFilter()
+        produced_text = False
         try:
             async with self._http.stream(
-                "POST", f"{self._base_url}/api/chat", json=payload, timeout=self._timeout
+                "POST",
+                f"{self._base_url}/api/chat",
+                json=self._payload(request),
+                timeout=self._timeout,
             ) as resp:
-                if resp.status_code == 404:
-                    self.invalidate()
-                    raise ModelNotInstalledError(f"local model '{self.model}' is not installed")
-                if resp.status_code >= 500:
-                    raise ProviderUnavailableError("local AI runtime error")
-                if resp.status_code >= 400:
-                    raise ProviderRequestError("local AI rejected the request")
+                await self._raise_for_status(resp)
                 async for line in resp.aiter_lines():
                     if not line.strip():
                         continue
@@ -130,8 +219,10 @@ class OllamaProvider(ChatProvider):
                         continue
                     if chunk.get("error"):
                         raise ProviderUnavailableError("local AI reported an error")
-                    text = (chunk.get("message") or {}).get("content")
+                    # message.thinking (reasoning) is deliberately not shown.
+                    text = think_filter.feed((chunk.get("message") or {}).get("content") or "")
                     if text:
+                        produced_text = True
                         yield TextDelta(text)
                     if chunk.get("done"):
                         end = StreamEnd(
@@ -150,4 +241,16 @@ class OllamaProvider(ChatProvider):
             raise ProviderUnavailableError("local AI timed out") from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError("local AI connection problem") from exc
+
+        rest = think_filter.flush()
+        if rest:
+            produced_text = True
+            yield TextDelta(rest)
+        if not produced_text:
+            reason = (
+                "the local model used its whole output limit before answering"
+                if end.finish_reason == "length"
+                else "the local model returned an empty answer"
+            )
+            raise ProviderUnavailableError(reason)
         yield end

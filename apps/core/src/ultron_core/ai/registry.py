@@ -72,6 +72,9 @@ def build_providers(settings: Settings, http: httpx.AsyncClient) -> list[ChatPro
             connect_timeout=settings.ai_connect_timeout_seconds,
             # Local models can take a while to load on first use.
             read_timeout=max(settings.ai_request_timeout_seconds, 180.0),
+            think=settings.ollama_think,
+            num_ctx=settings.ollama_num_ctx,
+            keep_alive=settings.ollama_keep_alive,
         ),
     ]
     if settings.ai_dev_mock != "off":
