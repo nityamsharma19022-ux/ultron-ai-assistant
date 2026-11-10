@@ -28,6 +28,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/fonts/OFL-orbitron.txt
+    - assets/fonts/OFL-inter.txt
   fonts:
     # SIL Open Font License 1.1 (licence files in assets/fonts)
     - family: Orbitron

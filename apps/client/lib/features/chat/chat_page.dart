@@ -82,7 +82,9 @@ class _ChatView extends ConsumerWidget {
                 child: state.loading
                     ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                     : state.loadError != null
-                    ? Center(child: Text(state.loadError!, style: const TextStyle(color: UltronColors.danger)))
+                    ? Center(
+                        child: Text(state.loadError!, style: const TextStyle(color: UltronColors.danger)),
+                      )
                     : empty
                     ? _EmptyState(state: state, heroBuilder: heroBuilder, onPick: chat.send)
                     : ListView.builder(
@@ -126,9 +128,7 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chat = ref.read(chatProvider.notifier);
-    final privateSupported = ref.watch(
-      systemStatusProvider.select((s) => s.ai?.privateConversationsSupported ?? true),
-    );
+    final privateSupported = ref.watch(systemStatusProvider.select((s) => s.ai?.privateConversationsSupported ?? true));
     final title = state.conversation?.displayTitle ?? 'New conversation';
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),

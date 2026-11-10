@@ -8,7 +8,11 @@ void main() {
     final source = StreamController<int>();
     final seen = <int>[];
     var done = false;
-    withIdleTimeout(source.stream, const Duration(seconds: 5), () => 'idle').listen(seen.add, onDone: () => done = true);
+    withIdleTimeout(
+      source.stream,
+      const Duration(seconds: 5),
+      () => 'idle',
+    ).listen(seen.add, onDone: () => done = true);
     source
       ..add(1)
       ..add(2);
@@ -22,8 +26,11 @@ void main() {
     final source = StreamController<int>();
     final errors = <Object>[];
     var done = false;
-    withIdleTimeout(source.stream, const Duration(seconds: 5), () => 'idle')
-        .listen((_) {}, onError: errors.add, onDone: () => done = true);
+    withIdleTimeout(
+      source.stream,
+      const Duration(seconds: 5),
+      () => 'idle',
+    ).listen((_) {}, onError: errors.add, onDone: () => done = true);
     source.add(1);
     await tester.pump(const Duration(seconds: 4));
     expect(errors, isEmpty);

@@ -23,7 +23,7 @@ void main() {
     await pumpUltron(tester, FakeBackend(), signedIn: true);
     await tester.tap(find.byKey(const Key('nav-dashboard')));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('SYSTEM'), findsOneWidget);
+    expect(find.text('SYSTEM STATUS'), findsOneWidget);
   });
 
   testWidgets('connection indicator shows cloud and local availability', (tester) async {

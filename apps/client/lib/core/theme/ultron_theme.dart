@@ -4,10 +4,7 @@ import 'ultron_colors.dart';
 
 /// Builds the dark theme around the chosen accent colour.
 ThemeData buildUltronTheme(Color accent) {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: accent,
-    brightness: Brightness.dark,
-  ).copyWith(
+  final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.dark).copyWith(
     primary: accent,
     secondary: accent,
     surface: UltronColors.surface,

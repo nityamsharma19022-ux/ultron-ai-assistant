@@ -6,6 +6,8 @@ import 'core/settings/app_settings.dart';
 import 'core/theme/ultron_theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_page.dart';
+import 'features/dashboard/dashboard_page.dart';
+import 'features/settings/settings_page.dart';
 import 'features/shell/app_shell.dart';
 import 'features/shell/sections.dart';
 import 'features/visualizer/chat_visualizer.dart';
@@ -40,26 +42,15 @@ class UltronApp extends ConsumerWidget {
   }
 }
 
-/// Section pages. Dashboard and settings are placeholders until their
-/// increment lands.
+/// The real section pages.
 Map<AppSection, Widget> defaultPages() => {
   AppSection.chat: ChatPage(
     heroBuilder: (context, state, size) => ChatVisualizer(size: size),
     headerOrbBuilder: (context, state, size) => ChatVisualizer(size: size),
   ),
-  AppSection.dashboard: const _ComingSoon(section: AppSection.dashboard),
-  AppSection.settings: const _ComingSoon(section: AppSection.settings),
+  AppSection.dashboard: const DashboardPage(),
+  AppSection.settings: const SettingsPage(),
 };
-
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({required this.section});
-  final AppSection section;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Text(section.label.toUpperCase(), style: Theme.of(context).textTheme.headlineSmall),
-  );
-}
 
 class _Splash extends StatelessWidget {
   const _Splash({super.key});

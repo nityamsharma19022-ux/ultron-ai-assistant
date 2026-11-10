@@ -50,10 +50,7 @@ void main() {
 
   test('network failure becomes a friendly network error', () async {
     backend.online = false;
-    await expectLater(
-      api.healthLive(),
-      throwsA(isA<ApiException>().having((e) => e.isNetwork, 'network', isTrue)),
-    );
+    await expectLater(api.healthLive(), throwsA(isA<ApiException>().having((e) => e.isNetwork, 'network', isTrue)));
   });
 
   test('error details in all backend formats', () async {
@@ -61,7 +58,9 @@ void main() {
       'detail': {'code': 'no_ai_available', 'message': 'No AI provider is available'},
     });
     backend.routes['GET /api/v1/y'] = (_, _) async => FakeBackend.json(422, {
-      'detail': [{'msg': 'Value error, must not be empty'}],
+      'detail': [
+        {'msg': 'Value error, must not be empty'},
+      ],
     });
     final x = UltronApi(baseUrl: 'http://ultron.test', tokens: tokens, client: backend.client);
     await tokens.save(TokenPair.fromJson(backend.tokens()));
@@ -69,7 +68,11 @@ void main() {
     backend.routes['GET /api/v1/ai/status'] = backend.routes['GET /api/v1/x']!;
     await expectLater(
       x.aiStatus(),
-      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'no_ai_available').having((e) => e.message, 'msg', 'No AI provider is available')),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.code, 'code', 'no_ai_available')
+            .having((e) => e.message, 'msg', 'No AI provider is available'),
+      ),
     );
     backend.routes['GET /api/v1/ai/status'] = backend.routes['GET /api/v1/y']!;
     await expectLater(

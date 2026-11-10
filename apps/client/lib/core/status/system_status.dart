@@ -11,14 +11,7 @@ import '../providers.dart';
 enum BackendLink { checking, online, degraded, offline }
 
 class SystemStatus {
-  const SystemStatus({
-    this.link = BackendLink.checking,
-    this.live,
-    this.ready,
-    this.ai,
-    this.error,
-    this.checkedAt,
-  });
+  const SystemStatus({this.link = BackendLink.checking, this.live, this.ready, this.ai, this.error, this.checkedAt});
 
   final BackendLink link;
   final HealthLive? live;

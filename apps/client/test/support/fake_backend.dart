@@ -86,10 +86,80 @@ class FakeBackend {
     'local_ai_available': local,
     'private_conversations_supported': local,
     'providers': [
-      {'name': 'groq', 'kind': 'cloud', 'model': 'llama', 'configured': cloud, 'available': cloud, 'status': cloud ? 'ready' : 'not_configured'},
-      {'name': 'ollama', 'kind': 'local', 'model': 'qwen3.5:4b', 'configured': true, 'available': local, 'status': local ? 'ready' : 'unavailable', 'model_loaded': local},
+      {
+        'name': 'groq',
+        'kind': 'cloud',
+        'model': 'llama',
+        'configured': cloud,
+        'available': cloud,
+        'status': cloud ? 'ready' : 'not_configured',
+      },
+      {
+        'name': 'ollama',
+        'kind': 'local',
+        'model': 'qwen3.5:4b',
+        'configured': true,
+        'available': local,
+        'status': local ? 'ready' : 'unavailable',
+        'model_loaded': local,
+      },
     ],
   };
+
+  // ---------------------------------------------------- devices, AI prefs
+  final devices = <Map<String, dynamic>>[
+    Map.of(me['device']! as Map<String, dynamic>),
+    {
+      'id': 'device-2',
+      'name': 'Pixel phone',
+      'platform': 'android',
+      'created_at': '2026-11-08T09:00:00Z',
+      'last_seen_at': '2026-11-09T18:30:00Z',
+      'revoked_at': null,
+    },
+  ];
+  Map<String, dynamic> preferences = {
+    'mode': 'auto',
+    'cloud_order': ['groq', 'gemini'],
+    'private_by_default': false,
+    'available_cloud_providers': ['groq', 'gemini', 'openrouter'],
+  };
+  int preferenceSaves = 0;
+
+  /// Status and body returned by the warm-up route.
+  int warmupStatus = 200;
+  Map<String, dynamic> warmupBody = {
+    'status': 'ready',
+    'provider': 'ollama',
+    'model': 'qwen3.5:4b',
+    'already_loaded': false,
+    'seconds': 2.5,
+  };
+
+  Future<http.StreamedResponse>? _extras(http.BaseRequest r, String body) {
+    final path = r.url.path;
+    final revoke = RegExp(r'^/api/v1/devices/([^/]+)$').firstMatch(path);
+    if (revoke != null && r.method == 'DELETE') {
+      final d = devices.where((x) => x['id'] == revoke.group(1)).firstOrNull;
+      if (d == null) return Future.value(json(404, {'detail': 'Device not found'}));
+      d['revoked_at'] = '2026-11-10T12:00:00Z';
+      return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+    }
+    switch ('${r.method} $path') {
+      case 'GET /api/v1/devices':
+        return Future.value(json(200, devices));
+      case 'GET /api/v1/ai/preferences':
+        return Future.value(json(200, preferences));
+      case 'PUT /api/v1/ai/preferences':
+        final b = jsonDecode(body) as Map<String, dynamic>;
+        preferenceSaves++;
+        preferences = {...preferences, ...b};
+        return Future.value(json(200, preferences));
+      case 'POST /api/v1/ai/local/warmup':
+        return Future.value(json(warmupStatus, warmupBody));
+    }
+    return null;
+  }
 
   // ------------------------------------------------------------ chat
   final conversations = <Map<String, dynamic>>[];
@@ -109,7 +179,16 @@ class FakeBackend {
 
   String nextId() => '00000000-0000-0000-0000-${(++_ids).toString().padLeft(12, '0')}';
 
-  Map<String, dynamic> message(String role, String content, {String status = 'complete', String? kind, String? provider, String? model, String? id, String? errorCode}) => {
+  Map<String, dynamic> message(
+    String role,
+    String content, {
+    String status = 'complete',
+    String? kind,
+    String? provider,
+    String? model,
+    String? id,
+    String? errorCode,
+  }) => {
     'id': id ?? nextId(),
     'role': role,
     'content': content,
@@ -137,8 +216,14 @@ class FakeBackend {
 
   static List<(String, Map<String, dynamic>)> defaultReply(String assistantId, {String kind = 'local'}) => [
     ('status', {'phase': 'routing'}),
-    ('status', {'phase': 'loading_model', 'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'model_loaded': false}),
-    ('provider.selected', {'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'fallback_used': false, 'attempts': []}),
+    (
+      'status',
+      {'phase': 'loading_model', 'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'model_loaded': false},
+    ),
+    (
+      'provider.selected',
+      {'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b', 'fallback_used': false, 'attempts': []},
+    ),
     ('status', {'phase': 'generating', 'provider': 'ollama', 'kind': kind, 'model': 'qwen3.5:4b'}),
     ('delta', {'text': 'Hello'}),
     ('delta', {'text': ' from'}),
@@ -158,11 +243,15 @@ class FakeBackend {
     final controller = StreamController<List<int>>();
     String sse(String e, Map<String, dynamic> d) => 'event: $e\ndata: ${jsonEncode(d)}\n\n';
     () async {
-      controller.add(utf8.encode(sse('message.created', {
-        'user_message': user,
-        'assistant_message_id': assistantId,
-        'private': c['is_private'],
-      })));
+      controller.add(
+        utf8.encode(
+          sse('message.created', {
+            'user_message': user,
+            'assistant_message_id': assistantId,
+            'private': c['is_private'],
+          }),
+        ),
+      );
       final text = StringBuffer();
       String? kind;
       var cancelled = false;
@@ -181,12 +270,26 @@ class FakeBackend {
           return;
         }
       }
-      final final_ = message('assistant', text.toString(),
-          id: assistantId, status: cancelled ? 'cancelled' : 'complete', kind: kind, provider: kind == null ? null : 'ollama', model: kind == null ? null : 'qwen3.5:4b');
+      final final_ = message(
+        'assistant',
+        text.toString(),
+        id: assistantId,
+        status: cancelled ? 'cancelled' : 'complete',
+        kind: kind,
+        provider: kind == null ? null : 'ollama',
+        model: kind == null ? null : 'qwen3.5:4b',
+      );
       messages[conversationId]!.add(final_);
-      controller.add(utf8.encode(cancelled
-          ? sse('message.cancelled', {'assistant_message': final_, 'routing': null})
-          : sse('message.completed', {'assistant_message': final_, 'routing': {'kind': kind}})));
+      controller.add(
+        utf8.encode(
+          cancelled
+              ? sse('message.cancelled', {'assistant_message': final_, 'routing': null})
+              : sse('message.completed', {
+                  'assistant_message': final_,
+                  'routing': {'kind': kind},
+                }),
+        ),
+      );
       await controller.close();
     }();
     return http.StreamedResponse(controller.stream, 200, headers: {'content-type': 'text/event-stream'});
@@ -229,7 +332,13 @@ class FakeBackend {
     final path = r.url.path;
     switch ('${r.method} $path') {
       case 'GET /health/live':
-        return json(200, {'status': 'ok', 'service': 'ultron-core', 'version': '0.1.0', 'deployment': 'local', 'node_id': 'ultron-windows-local'});
+        return json(200, {
+          'status': 'ok',
+          'service': 'ultron-core',
+          'version': '0.1.0',
+          'deployment': 'local',
+          'node_id': 'ultron-windows-local',
+        });
       case 'GET /health/ready':
         return json(ready ? 200 : 503, {
           'status': ready ? 'ready' : 'not_ready',
@@ -253,7 +362,7 @@ class FakeBackend {
         return http.StreamedResponse(const Stream.empty(), 204);
     }
     if (!authorized(r)) return json(401, {'detail': 'Not authenticated'});
-    final chat = _chat(r, body);
+    final chat = _chat(r, body) ?? _extras(r, body);
     if (chat != null) return chat;
     switch ('${r.method} $path') {
       case 'GET /api/v1/auth/me':

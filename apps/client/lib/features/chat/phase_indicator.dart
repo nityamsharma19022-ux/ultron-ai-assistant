@@ -36,11 +36,7 @@ class PhaseIndicator extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 1.6, color: color),
-                  ),
+                  SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.6, color: color)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(

@@ -85,8 +85,7 @@ class UltronApi {
 
   void close() => _client.close();
 
-  Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri.parse('$baseUrl$path').replace(queryParameters: query);
+  Uri _uri(String path, [Map<String, String>? query]) => Uri.parse('$baseUrl$path').replace(queryParameters: query);
 
   // ------------------------------------------------------------ health
 
@@ -116,13 +115,18 @@ class UltronApi {
     required String platform,
   }) async {
     final deviceId = await tokens.readDeviceId();
-    final body = await _json('POST', '/api/v1/auth/login', auth: false, body: {
-      'email': email.trim(),
-      'password': password,
-      'device_name': deviceName,
-      'platform': platform,
-      'device_id': ?deviceId,
-    });
+    final body = await _json(
+      'POST',
+      '/api/v1/auth/login',
+      auth: false,
+      body: {
+        'email': email.trim(),
+        'password': password,
+        'device_name': deviceName,
+        'platform': platform,
+        'device_id': ?deviceId,
+      },
+    );
     final pair = TokenPair.fromJson(body);
     await tokens.save(pair);
     return pair;
@@ -155,9 +159,8 @@ class UltronApi {
   Future<AiPreferences> saveAiPreferences(AiPreferences p) async =>
       AiPreferences.fromJson(await _json('PUT', '/api/v1/ai/preferences', body: p.toJson()));
 
-  Future<WarmupResult> warmupLocalModel() async => WarmupResult.fromJson(
-    await _json('POST', '/api/v1/ai/local/warmup', timeout: const Duration(minutes: 4)),
-  );
+  Future<WarmupResult> warmupLocalModel() async =>
+      WarmupResult.fromJson(await _json('POST', '/api/v1/ai/local/warmup', timeout: const Duration(minutes: 4)));
 
   // ------------------------------------------------------------ chat
 
@@ -166,11 +169,9 @@ class UltronApi {
       Conversation.fromJson(c as Map<String, dynamic>),
   ];
 
-  Future<Conversation> createConversation({bool? isPrivate, String? title}) async =>
-      Conversation.fromJson(await _json('POST', '/api/v1/conversations', body: {
-        'is_private': ?isPrivate,
-        'title': ?title,
-      }));
+  Future<Conversation> createConversation({bool? isPrivate, String? title}) async => Conversation.fromJson(
+    await _json('POST', '/api/v1/conversations', body: {'is_private': ?isPrivate, 'title': ?title}),
+  );
 
   Future<(Conversation, List<ChatMessage>)> conversation(String id) async {
     final j = await _json('GET', '/api/v1/conversations/$id', query: {'limit': '200'}) as Map<String, dynamic>;
@@ -181,16 +182,13 @@ class UltronApi {
   }
 
   Future<Conversation> updateConversation(String id, {String? title, bool makePrivate = false}) async =>
-      Conversation.fromJson(await _json('PATCH', '/api/v1/conversations/$id', body: {
-        'title': ?title,
-        if (makePrivate) 'is_private': true,
-      }));
+      Conversation.fromJson(
+        await _json('PATCH', '/api/v1/conversations/$id', body: {'title': ?title, if (makePrivate) 'is_private': true}),
+      );
 
-  Future<void> deleteConversation(String id) =>
-      _json('DELETE', '/api/v1/conversations/$id', expectBody: false);
+  Future<void> deleteConversation(String id) => _json('DELETE', '/api/v1/conversations/$id', expectBody: false);
 
-  Future<void> cancelReply(String conversationId) =>
-      _json('POST', '/api/v1/conversations/$conversationId/cancel');
+  Future<void> cancelReply(String conversationId) => _json('POST', '/api/v1/conversations/$conversationId/cancel');
 
   /// Sends a message and streams the reply. Cancelling the subscription (or
   /// completing [abort]) closes the connection; the server then stops.

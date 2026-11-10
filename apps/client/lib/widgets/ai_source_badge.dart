@@ -16,7 +16,8 @@ class AiSourceBadge extends StatelessWidget {
     final color = local ? UltronColors.local : UltronColors.cloud;
     final parts = [?provider, ?model];
     return Semantics(
-      label: '${local ? 'Local' : 'Cloud'} AI${parts.isEmpty ? '' : ', ${parts.join(', ')}'}${fallback ? ', fallback' : ''}',
+      label:
+          '${local ? 'Local' : 'Cloud'} AI${parts.isEmpty ? '' : ', ${parts.join(', ')}'}${fallback ? ', fallback' : ''}',
       child: Wrap(
         spacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,

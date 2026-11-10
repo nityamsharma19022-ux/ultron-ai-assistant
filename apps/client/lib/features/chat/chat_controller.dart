@@ -44,6 +44,7 @@ class ChatController extends Notifier<ChatState> {
   StreamSubscription<ChatStreamEvent>? _sub;
   Completer<void>? _abort;
   int _tempIds = 0;
+  bool _privateDefault = false;
 
   /// Called with each finished assistant reply (used by voice read-aloud).
   void Function(ChatMessage reply)? onReplyFinished;
@@ -66,7 +67,13 @@ class ChatController extends Notifier<ChatState> {
   /// Start a fresh conversation (created on the first message).
   void newConversation({bool? private}) {
     _stopStreaming();
-    state = ChatState(newChatPrivate: private ?? state.newChatPrivate);
+    state = ChatState(newChatPrivate: private ?? _privateDefault);
+  }
+
+  /// Applies the "private by default" preference to a fresh, empty chat.
+  void applyPrivateDefault(bool value) {
+    _privateDefault = value;
+    if (state.conversation == null && state.messages.isEmpty) state = state.copyWith(newChatPrivate: value);
   }
 
   void setNewChatPrivate(bool value) {
@@ -119,9 +126,7 @@ class ChatController extends Notifier<ChatState> {
     );
 
     void updateAssistant(ChatMessage Function(ChatMessage m) change) {
-      state = state.copyWith(
-        messages: [for (final m in state.messages) m.id == assistantId ? change(m) : m],
-      );
+      state = state.copyWith(messages: [for (final m in state.messages) m.id == assistantId ? change(m) : m]);
     }
 
     void fail(String code, String message) {

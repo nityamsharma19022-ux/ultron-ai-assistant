@@ -47,7 +47,11 @@ class CorePainter extends CustomPainter {
       r,
       Paint()
         ..shader = RadialGradient(
-          colors: [color.withValues(alpha: 0.30 * style.glow), color.withValues(alpha: 0.08 * style.glow), color.withValues(alpha: 0)],
+          colors: [
+            color.withValues(alpha: 0.30 * style.glow),
+            color.withValues(alpha: 0.08 * style.glow),
+            color.withValues(alpha: 0),
+          ],
           stops: const [0.0, 0.55, 1.0],
         ).createShader(Rect.fromCircle(center: c, radius: r)),
     );

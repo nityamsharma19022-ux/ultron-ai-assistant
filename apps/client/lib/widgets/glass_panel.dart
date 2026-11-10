@@ -33,19 +33,29 @@ class GlassPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            padding: padding,
+          // A gradient replaces a decoration's colour, so the tint is a
+          // second layer over the panel fill.
+          child: DecoratedBox(
             decoration: BoxDecoration(
               color: UltronColors.panel,
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(color: accent.withValues(alpha: 0.22)),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [accent.withValues(alpha: 0.06), Colors.transparent],
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [accent.withValues(alpha: 0.06), Colors.transparent],
+                ),
+              ),
+              // Lets list tiles and buttons inside draw their ink ripples.
+              child: Material(
+                type: MaterialType.transparency,
+                child: Padding(padding: padding, child: child),
               ),
             ),
-            child: child,
           ),
         ),
       ),

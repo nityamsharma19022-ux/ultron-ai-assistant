@@ -78,11 +78,13 @@ class ChatState {
 
 /// Human-readable explanations for the backend's error codes.
 String friendlyError(String code, String fallback) => switch (code) {
-  'no_ai_available' => 'No AI is available right now: cloud providers are not set up or unavailable, '
-      'and local AI is not running.',
+  'no_ai_available' =>
+    'No AI is available right now: cloud providers are not set up or unavailable, '
+        'and local AI is not running.',
   'offline_no_local_ai' => 'Cloud AI can\'t be reached and no local model is available.',
-  'private_requires_local_ai' => 'This conversation is private, so it can only use local AI, '
-      'which isn\'t available right now.',
+  'private_requires_local_ai' =>
+    'This conversation is private, so it can only use local AI, '
+        'which isn\'t available right now.',
   'local_ai_unavailable' => 'Local AI is not available. Check that Ollama is running.',
   'cloud_ai_unavailable' => 'No cloud AI provider is available right now.',
   'timeout' => 'The reply took too long and was stopped.',

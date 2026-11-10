@@ -32,14 +32,26 @@ class ConnectionIndicator extends ConsumerWidget {
       ],
     );
     return Semantics(
-      label: '$label. Cloud AI ${online && s.cloudAvailable ? 'available' : 'unavailable'}. '
+      label:
+          '$label. Cloud AI ${online && s.cloudAvailable ? 'available' : 'unavailable'}. '
           'Local AI ${online && s.localAvailable ? 'available' : 'unavailable'}.',
       child: compact
-          ? Row(mainAxisSize: MainAxisSize.min, children: [StatusDot(color: color), const SizedBox(width: 6), ...chips])
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                StatusDot(color: color),
+                const SizedBox(width: 6),
+                ...chips,
+              ],
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: [link, const SizedBox(height: 10), Wrap(spacing: 6, children: chips)],
+              children: [
+                link,
+                const SizedBox(height: 10),
+                Wrap(spacing: 6, children: chips),
+              ],
             ),
     );
   }

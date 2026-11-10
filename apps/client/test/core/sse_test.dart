@@ -7,11 +7,13 @@ Stream<List<int>> chunks(List<String> parts) => Stream.fromIterable(parts.map(ut
 
 void main() {
   test('parses events and ignores keep-alive comments', () async {
-    final events = await parseSse(chunks([
-      'event: status\ndata: {"phase": "routing"}\n\n',
-      ': keep-alive\n\n',
-      'event: delta\ndata: {"text": "Hi"}\n\n',
-    ])).toList();
+    final events = await parseSse(
+      chunks([
+        'event: status\ndata: {"phase": "routing"}\n\n',
+        ': keep-alive\n\n',
+        'event: delta\ndata: {"text": "Hi"}\n\n',
+      ]),
+    ).toList();
     expect(events.map((e) => e.event), ['status', 'delta']);
     expect(events.last.json['text'], 'Hi');
   });

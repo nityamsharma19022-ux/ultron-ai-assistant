@@ -64,14 +64,22 @@ void main() {
     final backend = FakeBackend()
       ..replyScript = (_, _) => [
         ('status', {'phase': 'routing'}),
-        ('error', {
-          'code': 'private_requires_local_ai',
-          'message': 'raw',
-          'assistant_message': {
-            'id': 'a1', 'role': 'assistant', 'content': '', 'status': 'failed', 'fallback_used': false,
-            'error_code': 'private_requires_local_ai', 'created_at': '2026-11-09T10:00:00Z',
+        (
+          'error',
+          {
+            'code': 'private_requires_local_ai',
+            'message': 'raw',
+            'assistant_message': {
+              'id': 'a1',
+              'role': 'assistant',
+              'content': '',
+              'status': 'failed',
+              'fallback_used': false,
+              'error_code': 'private_requires_local_ai',
+              'created_at': '2026-11-09T10:00:00Z',
+            },
           },
-        }),
+        ),
       ];
     final app = await pumpUltron(tester, backend, signedIn: true);
     await sendViaUi(tester, 'secret');

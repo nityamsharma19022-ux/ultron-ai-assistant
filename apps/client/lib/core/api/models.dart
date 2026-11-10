@@ -112,10 +112,7 @@ class ChatMessage {
     id: j['id'] as String,
     role: j['role'] as String,
     content: j['content'] as String? ?? '',
-    status: MessageStatus.values.firstWhere(
-      (s) => s.name == j['status'],
-      orElse: () => MessageStatus.complete,
-    ),
+    status: MessageStatus.values.firstWhere((s) => s.name == j['status'], orElse: () => MessageStatus.complete),
     provider: j['provider'] as String?,
     providerKind: j['provider_kind'] as String?,
     model: j['model'] as String?,
@@ -234,20 +231,14 @@ class AiPreferences {
     mode: j['mode'] as String? ?? 'auto',
     cloudOrder: [for (final n in (j['cloud_order'] as List? ?? const [])) n as String],
     privateByDefault: j['private_by_default'] as bool? ?? false,
-    availableCloudProviders: [
-      for (final n in (j['available_cloud_providers'] as List? ?? const [])) n as String,
-    ],
+    availableCloudProviders: [for (final n in (j['available_cloud_providers'] as List? ?? const [])) n as String],
   );
   final String mode;
   final List<String> cloudOrder;
   final bool privateByDefault;
   final List<String> availableCloudProviders;
 
-  Map<String, dynamic> toJson() => {
-    'mode': mode,
-    'cloud_order': cloudOrder,
-    'private_by_default': privateByDefault,
-  };
+  Map<String, dynamic> toJson() => {'mode': mode, 'cloud_order': cloudOrder, 'private_by_default': privateByDefault};
 
   AiPreferences copyWith({String? mode, List<String>? cloudOrder, bool? privateByDefault}) => AiPreferences(
     mode: mode ?? this.mode,

@@ -49,10 +49,7 @@ class MessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
-        children: [
-          text,
-          if (!user) ..._footer(context),
-        ],
+        children: [text, if (!user) ..._footer(context)],
       ),
     );
 
@@ -96,8 +93,7 @@ class MessageBubble extends StatelessWidget {
                 style: TextStyle(fontSize: 12.5, color: failed ? UltronColors.danger : UltronColors.textSecondary),
               ),
             ),
-            if (onRetry != null && failed)
-              TextButton(onPressed: onRetry, child: const Text('Retry')),
+            if (onRetry != null && failed) TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       );

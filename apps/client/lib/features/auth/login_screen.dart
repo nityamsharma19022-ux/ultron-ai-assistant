@@ -118,11 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         children: [
                           const Center(child: UltronLogo(size: 26)),
                           const SizedBox(height: 10),
-                          Text(
-                            'Personal AI assistant',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelSmall,
-                          ),
+                          Text('Personal AI assistant', textAlign: TextAlign.center, style: theme.textTheme.labelSmall),
                           const SizedBox(height: 28),
                           TextFormField(
                             key: const Key('backend-url'),

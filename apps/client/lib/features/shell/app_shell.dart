@@ -7,6 +7,7 @@ import '../../core/theme/ultron_colors.dart';
 import '../../widgets/connection_indicator.dart';
 import '../../widgets/ultron_background.dart';
 import '../../widgets/ultron_logo.dart';
+import '../settings/ai_preferences_controller.dart';
 import 'sections.dart';
 
 /// Width at which the sidebar replaces the bottom navigation bar.
@@ -21,6 +22,9 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final section = ref.watch(sectionProvider);
+    // Load AI preferences at sign-in so "private by default" applies to the
+    // first new chat, not only after Settings is opened.
+    ref.listen(aiPreferencesProvider, (_, _) {});
     final page = AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,
@@ -90,11 +94,7 @@ class _Sidebar extends ConsumerWidget {
           const UltronLogo(size: 18),
           const SizedBox(height: 32),
           for (final s in AppSection.values)
-            _NavItem(
-              section: s,
-              selected: s == section,
-              onTap: () => ref.read(sectionProvider.notifier).select(s),
-            ),
+            _NavItem(section: s, selected: s == section, onTap: () => ref.read(sectionProvider.notifier).select(s)),
           const Spacer(),
           const ConnectionIndicator(),
           const SizedBox(height: 16),
@@ -209,12 +209,6 @@ class _TopBar extends StatelessWidget {
     decoration: BoxDecoration(
       border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12))),
     ),
-    child: const Row(
-      children: [
-        UltronLogo(size: 15),
-        Spacer(),
-        ConnectionIndicator(compact: true),
-      ],
-    ),
+    child: const Row(children: [UltronLogo(size: 15), Spacer(), ConnectionIndicator(compact: true)]),
   );
 }

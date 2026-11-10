@@ -11,7 +11,9 @@ import 'package:ultron_app/features/visualizer/visualizer_mode.dart';
 import '../support/fake_backend.dart';
 import 'chat_test.dart' show sendViaUi;
 
-Widget host(Widget child) => MaterialApp(home: Scaffold(body: Center(child: child)));
+Widget host(Widget child) => MaterialApp(
+  home: Scaffold(body: Center(child: child)),
+);
 
 void main() {
   group('mode selection', () {
