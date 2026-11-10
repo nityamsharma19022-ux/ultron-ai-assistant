@@ -1,0 +1,37 @@
+name: ULTRON Agent CI
+
+on:
+  push:
+    paths:
+      - "apps/agent/**"
+      - ".github/workflows/agent-ci.yml"
+  pull_request:
+    paths:
+      - "apps/agent/**"
+      - ".github/workflows/agent-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # The agent is for Windows: test there for real (paths, DPAPI, process
+    # launching), and on Linux as well.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/agent
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Lint
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+      - name: Test
+        run: uv run pytest -q

@@ -18,7 +18,7 @@ Ollama.
 | 1 | Existing frontend/backend complete; Android build | ✅ APK builds; device install pending |
 | 2 | Memory, context, tool registry | ✅ Backend done and tested |
 | 3 | Task engine, permissions, agents protocol | ✅ Backend done and tested |
-| 4 | Windows desktop agent | ⏳ Next |
+| 4 | Windows desktop agent | ✅ Built; E2E verified on Linux; Windows run pending |
 | 5 | Android system assistant | ⏳ |
 | 6 | Files and multimodal | ⏳ |
 | 7 | Pairing and secure transport | ⏳ |
@@ -77,9 +77,35 @@ Ollama.
   runs a task or answers a question; optional wait for the result.
 - Migration `0004`. Tests: `tests/test_tasks.py` (19).
 
+## Stage 4 — Windows desktop agent (`apps/agent`)
+- Python program (`ultron-agent`): signs in as a Windows device, long-polls
+  Core for PC steps, runs them, reports progress and results; reconnects
+  with backoff; refresh token encrypted with Windows DPAPI.
+- Local allow-lists in `.ultron-agent/agent.toml` (git-ignored): folders,
+  apps (argument lists, no shell), workflows. Safe paths: no absolute
+  paths, `..`, drive letters, UNC, device names or link escapes.
+- Tools: status (psutil), apps list/open/focus (focus uses Win32 API),
+  files list/search/read (text, MD, PDF, DOCX)/create folder/write (txt,
+  md, docx, csv, json; atomic)/move/organize (by type or month, with undo
+  journal and `ultron-agent undo`)/delete (Recycle Bin), workflows (time
+  limit, cancel wins).
+- `scripts/windows/Install-UltronAgent.ps1`: start at Windows sign-in
+  (per-user Scheduled Task). **Not run yet** (no PowerShell here).
+- **End-to-end run (real Core in Docker + real agent process, Linux):**
+  "organize my downloads" asked first, then sorted 7 files into 6 folders;
+  "open sleeper", "run the tests workflow", "how is my pc doing" ran without
+  asking once granted; "open Notepad" refused (not an allowed app); a
+  3-step task (AI writes a plan → agent saves `documents/Study/weekly-plan.md`
+  → reads it back) completed; overwriting asked for approval.
+- Tests: `apps/agent/tests` (29 + 1 Windows-only DPAPI test).
+- CI: new **Agent CI** runs the agent tests on `windows-latest` and
+  `ubuntu-latest`; **App CI** now also builds the release APK and the
+  Windows app on GitHub's machines and keeps them as downloadable artifacts.
+
 ## Test results (latest run, 2026-11-10)
 - Backend: **190 passed, 11 skipped** (live Ollama tests), ruff clean.
 - App: 74 passed (unchanged since Phase 3; new screens come later).
+- Agent: 29 passed (+1 Windows-only, runs in CI).
 
 ## Known bugs
 - None open.

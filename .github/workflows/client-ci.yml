@@ -48,3 +48,57 @@ jobs:
       # no network, no real AI calls.
       - name: Test
         run: flutter test
+
+  # Real release builds of the app on GitHub's machines.
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/client
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install Flutter
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git flutter
+          echo "${{ runner.temp }}/flutter/bin" >> "$GITHUB_PATH"
+      - name: Build APK
+        run: |
+          flutter --disable-analytics
+          flutter build apk --release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ultron-android-apk
+          path: apps/client/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/client
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Flutter
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git flutter
+          echo "${{ runner.temp }}/flutter/bin" >> "$GITHUB_PATH"
+      - name: Build Windows app
+        run: |
+          flutter --disable-analytics
+          flutter build windows --release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ultron-windows
+          path: apps/client/build/windows/x64/runner/Release/
+          retention-days: 14

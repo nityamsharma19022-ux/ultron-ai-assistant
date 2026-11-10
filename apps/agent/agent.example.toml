@@ -1,0 +1,42 @@
+# ULTRON Windows agent configuration.
+# Copy to D:\ULTRON\ultron-ai-assistant\.ultron-agent\agent.toml
+# (`ultron-agent init` does this) and edit. This file is not tracked by Git.
+#
+# The agent only ever touches what is listed here.
+
+[server]
+# ULTRON Core on this PC.
+url = "http://127.0.0.1:8000"
+
+[agent]
+device_name = "Windows PC"
+# Tools to switch off completely, e.g. ["pc.files.delete"].
+disabled_tools = []
+
+# Folders ULTRON may work in. Paths in tasks look like "downloads/file.pdf".
+[roots]
+downloads = "%USERPROFILE%\\Downloads"
+documents = "%USERPROFILE%\\Documents"
+desktop = "%USERPROFILE%\\Desktop"
+ultron = "D:\\ULTRON\\ultron-ai-assistant"
+
+# Apps ULTRON may open. A path, or a table with the command as a list of
+# arguments (no shell) and optionally part of the window title.
+[apps]
+"VS Code" = { command = ["%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe"], window_title = "Visual Studio Code" }
+"Notepad" = "C:\\Windows\\System32\\notepad.exe"
+"File Explorer" = "C:\\Windows\\explorer.exe"
+"Chrome" = { command = ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"], window_title = "Chrome" }
+
+# Workflows: commands run one after another (argument lists, no shell).
+# cwd is inside an allowed folder.
+[workflows."Dev environment"]
+open_apps = ["VS Code"]
+commands = [["docker", "compose", "up", "-d"]]
+cwd = "ultron"
+timeout_seconds = 300
+
+[workflows."Core tests"]
+commands = [["uv", "run", "pytest", "-q"]]
+cwd = "ultron/apps/core"
+timeout_seconds = 900

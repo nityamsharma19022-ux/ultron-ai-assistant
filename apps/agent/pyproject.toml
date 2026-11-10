@@ -1,0 +1,44 @@
+[project]
+name = "ultron-agent"
+version = "0.1.0"
+description = "ULTRON Windows desktop agent: runs allowed PC actions for ULTRON Core"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "psutil>=7.0.0",
+    "pypdf>=6.0.0",
+    "python-docx>=1.2.0",
+    "send2trash>=1.8.3",
+]
+
+[project.scripts]
+ultron-agent = "ultron_agent.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ultron_agent"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S108"]

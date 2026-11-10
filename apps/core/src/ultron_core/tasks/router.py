@@ -67,8 +67,14 @@ async def _out(session: AsyncSession, task_id: uuid.UUID) -> TaskOut:
 
 def _task_message(task: TaskOut) -> str:
     if task.status == "completed":
-        first = (task.summary or "").splitlines()
-        return "Done. " + (first[0].lstrip("✓ ") if len(first) == 1 else task.title)
+        notes = [
+            str(s.result["summary"]).rstrip(".")
+            for s in task.steps
+            if s.result and isinstance(s.result.get("summary"), str)
+        ]
+        if len(task.steps) == 1 and notes:
+            return f"Done. {notes[0]}."
+        return f"Done: {task.title.rstrip('.')} ({len(task.steps)} steps)."
     if task.status == "awaiting_approval":
         waiting = [s.title for s in task.steps if s.status == "awaiting_approval"]
         return "I need your approval to: " + "; ".join(waiting or [task.title])

@@ -198,7 +198,7 @@ async def test_command_waits_and_reports_done(migrated_database) -> None:  # typ
         out = await command(client, h, "remind me to stretch in 15 minutes", wait=True)
         assert out["type"] == "task"
         assert out["task"]["status"] == "completed"
-        assert out["message"].startswith("Done. ")
+        assert out["message"].startswith("Done. Reminder set for ")
         reminders = (await client.get("/api/v1/reminders", headers=h)).json()
         assert reminders[0]["text"] == "stretch"
         assert (await client.get("/api/v1/reminders?due=true", headers=h)).json() == []

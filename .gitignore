@@ -46,3 +46,6 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# ULTRON Windows agent: local config, sign-in and undo files
+.ultron-agent/
