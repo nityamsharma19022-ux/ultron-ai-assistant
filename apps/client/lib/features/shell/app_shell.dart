@@ -8,6 +8,7 @@ import '../../widgets/connection_indicator.dart';
 import '../../widgets/ultron_background.dart';
 import '../../widgets/ultron_logo.dart';
 import '../settings/ai_preferences_controller.dart';
+import '../voice/voice_controller.dart';
 import 'sections.dart';
 
 /// Width at which the sidebar replaces the bottom navigation bar.
@@ -25,6 +26,16 @@ class AppShell extends ConsumerWidget {
     // Load AI preferences at sign-in so "private by default" applies to the
     // first new chat, not only after Settings is opened.
     ref.listen(aiPreferencesProvider, (_, _) {});
+    // Voice runs app-wide (it reads finished replies aloud) and reports
+    // problems as snack bars.
+    ref.listen(voiceProvider.select((v) => v.noticeId), (_, _) {
+      final notice = ref.read(voiceProvider).notice;
+      if (notice != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(notice)));
+      }
+    });
     final page = AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,

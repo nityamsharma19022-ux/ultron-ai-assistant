@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Talk to ULTRON Core (debug builds get this automatically; release
+         builds need it here). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Voice input (push-to-talk). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
-        android:label="ultron_app"
+        android:label="ULTRON"
+        android:usesCleartextTraffic="true"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -36,7 +42,17 @@
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <!-- usesCleartextTraffic: ULTRON Core on the emulator host or the
+         Windows PC over the LAN is plain HTTP until TLS pairing (Phase 3b,
+         see docs/SECURITY.md). -->
     <queries>
+        <!-- Speech recognition and text-to-speech services. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

@@ -13,6 +13,7 @@ import 'features/shell/sections.dart';
 import 'features/visualizer/chat_visualizer.dart';
 import 'widgets/glass_panel.dart';
 import 'widgets/ultron_background.dart';
+import 'features/voice/voice_controls.dart';
 import 'widgets/ultron_logo.dart';
 
 class UltronApp extends ConsumerWidget {
@@ -47,6 +48,7 @@ Map<AppSection, Widget> defaultPages() => {
   AppSection.chat: ChatPage(
     heroBuilder: (context, state, size) => ChatVisualizer(size: size),
     headerOrbBuilder: (context, state, size) => ChatVisualizer(size: size),
+    composerLeading: const VoiceButton(),
   ),
   AppSection.dashboard: const DashboardPage(),
   AppSection.settings: const SettingsPage(),

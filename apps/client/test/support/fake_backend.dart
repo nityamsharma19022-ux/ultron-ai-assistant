@@ -13,6 +13,10 @@ import 'package:ultron_app/core/auth/token_store.dart';
 import 'package:ultron_app/core/providers.dart';
 import 'package:ultron_app/core/settings/app_settings.dart';
 import 'package:ultron_app/features/shell/sections.dart';
+import 'package:ultron_app/features/voice/speech_engines.dart';
+import 'package:ultron_app/features/voice/voice_controller.dart';
+
+import 'fake_voice.dart';
 
 const ownerEmail = 'owner@ultron.local';
 const ownerPassword = 'correct-horse-battery';
@@ -382,6 +386,8 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   bool signedIn = false,
   Map<AppSection, Widget>? pages,
   Map<String, Object> prefs = const {},
+  SpeechInput? speechInput,
+  SpeechOutput? speechOutput,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -401,6 +407,8 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
         sharedPreferencesProvider.overrideWithValue(sp),
         tokenStoreProvider.overrideWithValue(tokens),
         httpClientProvider.overrideWithValue(backend.client),
+        speechInputProvider.overrideWithValue(speechInput ?? FakeSpeechInput()),
+        speechOutputProvider.overrideWithValue(speechOutput ?? FakeSpeechOutput()),
       ],
       child: UltronApp(pages: pages),
     ),

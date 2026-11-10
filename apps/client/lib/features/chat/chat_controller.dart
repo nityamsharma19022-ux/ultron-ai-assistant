@@ -46,9 +46,6 @@ class ChatController extends Notifier<ChatState> {
   int _tempIds = 0;
   bool _privateDefault = false;
 
-  /// Called with each finished assistant reply (used by voice read-aloud).
-  void Function(ChatMessage reply)? onReplyFinished;
-
   UltronApi get _api => ref.read(apiProvider);
 
   @override
@@ -197,7 +194,6 @@ class ChatController extends Notifier<ChatState> {
               case StreamCompleted(:final assistantMessage):
                 updateAssistant((_) => assistantMessage);
                 state = state.copyWith(phase: ReplyPhase.idle);
-                onReplyFinished?.call(assistantMessage);
               case StreamCancelled(:final assistantMessage):
                 updateAssistant((_) => assistantMessage);
                 state = state.copyWith(phase: ReplyPhase.idle);

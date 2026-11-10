@@ -8,6 +8,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/glass_panel.dart';
 import '../../widgets/ultron_logo.dart';
+import '../voice/voice_controller.dart';
 import 'ai_preferences_controller.dart';
 
 const appVersion = '0.3.0';
@@ -270,9 +271,13 @@ class _VoiceSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(settingsProvider);
     final n = ref.read(settingsProvider.notifier);
+    final speaking = ref.watch(voiceProvider.select((v) => v.speaking));
+    final onDevice = ref.watch(speechInputProvider).recognisesOnDevice;
+    const note = TextStyle(fontSize: 12.5, color: UltronColors.textSecondary);
     return _Section(
+      key: const Key('voice-settings'),
       title: 'VOICE',
-      subtitle: 'Uses this device\'s own speech engines.',
+      subtitle: 'Tap the mic in the chat box to talk; tap it again to send.',
       children: [
         SwitchListTile(
           key: const Key('speak-replies'),
@@ -290,6 +295,36 @@ class _VoiceSection extends ConsumerWidget {
           max: 0.9,
           divisions: 13,
           onChanged: n.setSpeechRate,
+        ),
+        OutlinedButton.icon(
+          key: const Key('test-voice'),
+          onPressed: speaking
+              ? ref.read(voiceProvider.notifier).stopSpeaking
+              : () => ref
+                    .read(voiceProvider.notifier)
+                    .speak('ULTRON voice check. This is how replies will sound.', private: true),
+          icon: Icon(speaking ? Icons.stop : Icons.volume_up_outlined),
+          label: Text(speaking ? 'Stop' : 'Test voice'),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.shield_outlined, size: 18, color: UltronColors.local),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                onDevice
+                    ? 'Speech recognition runs on this device (Windows Speech), so voice input also works in '
+                          'private conversations. Private replies are read with voices installed on this PC.'
+                    : "This device's speech recognition may use an online service (on Android usually "
+                          "Google's), so voice input is off in private conversations. Private replies are read "
+                          'aloud only with an offline voice.',
+                key: const Key('voice-privacy-note'),
+                style: note,
+              ),
+            ),
+          ],
         ),
       ],
     );
