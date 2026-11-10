@@ -231,6 +231,48 @@ _RULES: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+# Everyday names for common apps -> the name usually used in agent.toml.
+_APP_ALIASES = {
+    "files": "file explorer",
+    "my files": "file explorer",
+    "file manager": "file explorer",
+    "explorer": "file explorer",
+    "windows explorer": "file explorer",
+    "folders": "file explorer",
+    "browser": "chrome",
+    "web browser": "chrome",
+    "internet": "chrome",
+    "google chrome": "chrome",
+    "google": "chrome",
+    "vscode": "vs code",
+    "code": "vs code",
+    "visual studio code": "vs code",
+    "text editor": "notepad",
+    "notes": "notepad",
+}
+
+
+def _resolve_app(ctx: PlanContext, tool: str, name: str) -> str | None:
+    """Matches what the user said to an app the device announced. Returns None
+    when the device has a list and nothing fits (then the AI planner decides,
+    instead of sending a step that can only fail)."""
+    spec = tools.get(tool)
+    names = ctx.capabilities.get(spec.target if spec else "", {}).get("apps") if spec else None
+    if not names:
+        return name  # device didn't say; let it decide
+    said = " ".join(name.lower().split())
+    wanted = [said, _APP_ALIASES.get(said, said)]
+    for w in wanted:
+        for n in names:
+            if n.lower() == w:
+                return n
+    for w in wanted:
+        hits = [n for n in names if w in n.lower() or n.lower() in w]
+        if len(hits) == 1:
+            return hits[0]
+    return None
+
+
 def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
     t = normalize(text)
     for pattern, kind in _RULES:
@@ -260,7 +302,10 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
         elif kind == "close":
             if not available(ctx, "pc.apps.close"):
                 return None
-            raw = [{"tool": "pc.apps.close", "args": {"app": m.group("app").strip()}}]
+            app = _resolve_app(ctx, "pc.apps.close", m.group("app").strip())
+            if app is None:
+                return None
+            raw = [{"tool": "pc.apps.close", "args": {"app": app}}]
         elif kind in ("open", "focus"):
             tool = (
                 _device_tool(ctx, "pc.apps.open", "phone.apps.open")
@@ -269,7 +314,10 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
             )
             if tool is None:
                 return None
-            raw = [{"tool": tool, "args": {"app": m.group("app").strip()}}]
+            app = _resolve_app(ctx, tool, m.group("app").strip())
+            if app is None:
+                return None
+            raw = [{"tool": tool, "args": {"app": app}}]
         elif kind == "organize":
             folder = m.group("folder").lower()
             if folder not in _FOLDERS or not available(ctx, "pc.files.organize"):

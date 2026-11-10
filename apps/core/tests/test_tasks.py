@@ -153,6 +153,29 @@ def test_close_and_web_rules() -> None:
     assert planner.rule_plan("close chrome", ctx(targets={"core", "android"})) is None
 
 
+def test_app_names_are_understood() -> None:
+    apps = ["Chrome", "File Explorer", "Notepad", "VS Code"]
+    c = ctx(targets={"core", "windows"}, capabilities={"windows": {"apps": apps}})
+    c.origin = "windows"
+    for said, expected in [
+        ("open files", "File Explorer"),
+        ("open my files", "File Explorer"),
+        ("open file explorer", "File Explorer"),
+        ("open the browser", "Chrome"),
+        ("open vscode", "VS Code"),
+        ("launch NOTEPAD", "Notepad"),
+        ("switch to code", "VS Code"),
+        ("close the browser", "Chrome"),
+    ]:
+        plan = planner.rule_plan(said, c)
+        assert plan is not None and plan.steps[0].args == {"app": expected}, said
+    # Not an allowed app: no doomed step; the AI planner decides instead.
+    assert planner.rule_plan("open photoshop", c) is None
+    # Device that didn't list apps: the name is passed through.
+    plain = ctx(targets={"core", "windows"})
+    assert planner.rule_plan("open photoshop", plain).steps[0].args == {"app": "photoshop"}
+
+
 def test_time_zone_fallbacks() -> None:
     assert planner.zone("Asia/Kolkata").key == "Asia/Kolkata"
     ist = planner.zone(None, 330)

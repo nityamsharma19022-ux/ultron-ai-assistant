@@ -6,7 +6,7 @@ tested in the sandbox/CI but not yet on your PC or phone, ❌ = not done.
 | # | Criterion | Status | Evidence / what's left |
 |---|---|---|---|
 | 1 | Existing application works | ✅ | All earlier tests still pass; browser check against real Core |
-| 2 | Windows frontend builds and runs | 🟡 | **Builds** on GitHub's Windows machine (App CI `build-windows`); not yet run on your PC |
+| 2 | Windows frontend builds and runs | ✅ | CI build run by the owner on their PC (2026-11-10): sign-in, Home/Command Center, Core online, CLOUD + LOCAL indicators |
 | 3 | Android app builds and installs | 🟡 | Release APK builds here and in CI; **not installed** on the iQOO yet |
 | 4 | FastAPI backend works | ✅ | 228 backend tests (real PostgreSQL/Redis); runs in Docker here |
 | 5 | Cloud AI works | 🟡 | FreeLLMAPI verified with a stand-in gateway through a real Core server; needs your gateway key/port ([FREELLMAPI.md](FREELLMAPI.md)) and a Test in System → AI sources |
@@ -17,7 +17,7 @@ tested in the sandbox/CI but not yet on your PC or phone, ❌ = not done.
 | 10 | File intelligence | ✅ (documents) | PDF/DOCX/XLSX/text with tests on real generated files; **images, scans and audio not supported** |
 | 11 | Autonomous execution for authorized actions | ✅ (sandbox) | End-to-end with real Core + real agent process (Linux): organize, open app, workflow, status, multi-step write |
 | 12 | Permission management | ✅ | Classes A/B/C, grants with expiry, master switch, emergency stop: tests + E2E |
-| 13 | Windows agent functions | 🟡 | 36 tests on Linux + Windows CI; E2E on Linux; real Windows run pending |
+| 13 | Windows agent functions | 🟡 | Runs on the owner's PC: signs in, connects, offers 19 tools, live CPU/memory/battery shown on Home. Remaining: actions (open/organize/close) on the PC |
 | 14 | Android assistant within platform limits | 🟡 | VoiceInteractionService/session/recognizer compile into the APK; not run on a phone |
 | 15 | Default assistant selection tested | ❌ | Needs the iQOO (no device or KVM emulator here) |
 | 16 | Wake word tested, or fallback documented | ✅ (documented) | Not implemented; reasons and the system-gesture alternative in the Android guide |

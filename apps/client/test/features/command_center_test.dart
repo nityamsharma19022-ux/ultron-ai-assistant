@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ultron_app/core/settings/app_settings.dart';
 import 'package:ultron_app/features/command/command_controller.dart';
 import 'package:ultron_app/features/shell/sections.dart';
+import 'package:ultron_app/features/tasks/tasks_controller.dart';
 
 import '../support/fake_backend.dart';
 
@@ -254,5 +255,25 @@ void main() {
     await settle(tester);
     expect(backend.exports, 1);
     expect(copied, contains('ultron-export/1'));
+  });
+
+  testWidgets('AI activity refreshes by itself', (tester) async {
+    final old = ActivityController.pollEvery;
+    ActivityController.pollEvery = const Duration(seconds: 1);
+    addTearDown(() => ActivityController.pollEvery = old);
+    final backend = _backend();
+    await pumpUltron(tester, backend, signedIn: true, size: _big, section: AppSection.home);
+    await settle(tester);
+    expect(find.text('No activity yet.'), findsOneWidget);
+    backend.activity.add({
+      'seq': 1,
+      'kind': 'task.failed',
+      'summary': 'Failed: Open files',
+      'task_id': null,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await tester.pump(const Duration(seconds: 1));
+    await settle(tester);
+    expect(find.text('Failed: Open files'), findsOneWidget);
   });
 }

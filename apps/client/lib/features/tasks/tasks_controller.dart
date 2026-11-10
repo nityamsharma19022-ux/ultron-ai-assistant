@@ -102,10 +102,31 @@ class PermissionsController extends AsyncNotifier<List<PermissionInfo>> {
 final activityProvider = AsyncNotifierProvider<ActivityController, List<ActivityItem>>(ActivityController.new);
 
 class ActivityController extends AsyncNotifier<List<ActivityItem>> {
+  /// How often the activity list is refreshed while signed in.
+  static Duration pollEvery = const Duration(seconds: 20);
+  Timer? _timer;
+
   @override
   Future<List<ActivityItem>> build() async {
+    _timer?.cancel();
+    ref.onDispose(() => _timer?.cancel());
     if (ref.watch(sessionProvider) is! SignedIn) return const [];
-    return ref.watch(apiProvider).activity(limit: 50);
+    // Tasks starting, finishing or failing add activity: refresh with them.
+    ref.listen(tasksProvider.select((t) => t.value?.map((x) => '${x.id}:${x.status}').join(',')), (prev, next) {
+      if (prev != null && prev != next) refresh();
+    });
+    final items = await ref.watch(apiProvider).activity(limit: 50);
+    _timer = Timer.periodic(pollEvery, (_) => refresh());
+    return items;
+  }
+
+  /// Reloads the newest entries (keeps the list if Core can't be reached).
+  Future<void> refresh() async {
+    try {
+      state = AsyncData(await ref.read(apiProvider).activity(limit: 50));
+    } on ApiException {
+      // Next round.
+    }
   }
 
   Future<void> loadMore() async {

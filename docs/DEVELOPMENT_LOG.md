@@ -2,6 +2,27 @@
 
 Newest first. Each entry: what was done, how it was checked, what's left.
 
+## 2026-11-10 — First run on the owner's Windows PC
+
+Done by the owner, step by step, with photos (not in the sandbox):
+- FreeLLMAPI on 127.0.0.1:31415 lists working models (Gemini, Qwen
+  3.8 27B, gpt-oss and others).
+- `docker compose up -d --build`: `/health/ready` → ready, database at
+  0007, Redis ok, **local AI ok (`qwen3.5:4b`)**.
+- Windows app (CI build) signs in; Home shows Core online, CLOUD and LOCAL.
+- Windows agent: installed with `uv sync`, signed in, connected with 19
+  tools; Home → Devices shows live CPU, memory, battery, disk.
+
+Bugs found there and fixed:
+- "open files" failed ("'files' isn't in your allowed apps"): the planner
+  now understands everyday app names (files → File Explorer, browser →
+  Chrome, vscode → VS Code) and leaves unknown apps to the AI planner
+  instead of sending a step that can only fail.
+- Home → AI activity never refreshed: now every 20 s and when a task
+  changes.
+- The owner's Downloads folder is `E:\Downloads`, not the default; fixed in
+  their `agent.toml`.
+
 ## 2026-11-10 — Round 3: FreeLLMAPI and project audit
 
 Owner request: "Master development, integration & completion directive"
