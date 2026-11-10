@@ -2,6 +2,20 @@
 
 Newest first. Each entry: what was done, how it was checked, what's left.
 
+## 2026-11-10 — Phase 2: speed
+
+Done (tested in the sandbox, not yet on the owner's PC):
+- Benchmark script; baseline then after, with two stand-in cloud sources.
+- Rule fast path for clear commands in chat and the command bar; new
+  timer and alarm rules; offline tool → instant explanation.
+- Speed ranking from stored first-word times; Instant race with
+  cancellation; at most 5 memories (3 in Instant).
+- Ollama keep_alive -1, warm-up at Core start, CPU/GPU in status and app.
+- Bug found by the benchmark and fixed: a hand-set source order was being
+  re-ranked. It now wins (no ranking, no race).
+- Checks: Core 253 passed, App 133 passed, Agent 36 passed; ruff and
+  flutter analyze clean.
+
 ## 2026-11-10 — ULTRON 2.0, part 1: time, personality, speed
 
 Owner request: "ULTRON 2.0 ultimate master upgrade". Done this round

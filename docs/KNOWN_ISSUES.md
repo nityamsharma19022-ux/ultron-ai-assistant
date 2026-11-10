@@ -10,8 +10,15 @@ _Last updated: 2026-11-10._ Open bugs: **none known**. Limitations:
   Ollama with `qwen3.5:4b` on the PC.
 - Windows toast notifications (`pc.notify`) can't be tested in the Linux
   sandbox.
+- Phase 2 speed numbers come from stand-in AI sources in the sandbox. Real
+  gains depend on your sources; run `scripts/benchmark_ai.py` on your PC.
+- Ollama runs on the CPU without a supported graphics card; see
+  PERFORMANCE_REPORT → "Ollama on your graphics card".
 
 ## Limitations by design or platform
+- **Instant race** sends one Instant message to two cloud sources, so it
+  uses up to twice the free-tier quota for those messages. Turn it off
+  with `ULTRON_AI_INSTANT_RACE=false`.
 - **Wake word:** Android only lets system apps listen for a hotword. Use
   the assistant gesture. A Windows wake word is planned, not built.
 - **Phone in the background:** Android stops background work, so phone

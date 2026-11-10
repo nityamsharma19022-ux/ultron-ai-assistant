@@ -24,12 +24,17 @@ _Last updated: 2026-11-10._
 | Personality (humble, warm, polite), form of address ("Sir" default, configurable) | IMPLEMENTED | Tests check the prompt and task replies |
 | AI knows your local date and time | IMPLEMENTED | Device time zone sent with each message |
 | AI output is text only, never executed | IMPLEMENTED | Test `test_ai_output_is_stored_as_text_and_never_executed` |
+| Instant commands without AI (status, timer, alarm, reminder, remember, apps, links, workflows) | VERIFIED (sandbox) | `test_fast_path.py`; benchmark 957 ms → 6 ms. Approvals unchanged |
+| Rank cloud sources by measured speed (not Deep, private, or a hand-set order) | VERIFIED (sandbox) | `test_speed.py`; benchmark Balanced 750 → 450 ms with two stand-in sources |
+| Instant mode races the two fastest sources | VERIFIED (sandbox) | `test_speed.py`; benchmark Instant 752 → 454 ms |
+| Ollama kept loaded (`keep_alive=-1`), warmed at start, CPU/GPU shown | IMPLEMENTED / TESTING (your PC) | Tests with a fake Ollama |
+| Speed benchmark script | VERIFIED (sandbox) | `scripts/benchmark_ai.py`; [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) |
 
 ## Memory
 | Feature | Status | Evidence / notes |
 |---|---|---|
 | Memories: add, edit, pin, private, delete, export | VERIFIED | Tests + browser check |
-| Recall into chat as background facts | IMPLEMENTED | Tests check the system prompt |
+| Recall into chat as background facts (top 5; 3 in Instant) | IMPLEMENTED | Tests check the system prompt and the limit |
 | Project tags (project chats recall only their own + general memories) | IMPLEMENTED | `test_project_memories_are_scoped` |
 | Pause memory saving | IMPLEMENTED | Backend + app tests |
 | Search past conversations | IMPLEMENTED | Full-text search with highlights; backend + app tests |

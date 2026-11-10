@@ -3,6 +3,29 @@
 All notable changes to ULTRON. Dates are when the work was committed to
 `claude/fervent-lovelace-fqank5`.
 
+## [Unreleased] — 2026-11-10 (Phase 2: speed)
+
+### Added
+- **Instant commands without AI**: PC/phone status, timers, alarms,
+  reminders, "remember…", open/close/switch apps, links, workflows and
+  organizing run straight from rules, in chat and the command bar
+  (sandbox: 957 ms → 6 ms). Approvals still ask as before.
+- New rules: "set a 10 minute timer", "set an alarm for 6:30 am",
+  "wake me up at 7". When the tool is offline, ULTRON says how to start
+  the agent instead of waiting for the AI.
+- **Speed ranking**: cloud AI sources are tried fastest first, from each
+  source's average time to first word (last 20 replies, 14 days). Not in
+  Deep mode, private chats, or when you set the order by hand.
+- **Instant race**: Instant mode asks the two fastest sources at once and
+  keeps the first to answer; the other is cancelled.
+- **Ollama stays loaded** (`ULTRON_OLLAMA_KEEP_ALIVE=-1`, default) and is
+  warmed when Core starts. System → Local model shows **Runs on** CPU or GPU.
+- `scripts/benchmark_ai.py`: time to first word and total, per source and
+  mode, saved to `.ultron-bench/`.
+
+### Changed
+- Chat recalls at most 5 memories (3 in Instant), down from 8.
+
 ## [Unreleased] — 2026-11-10 (Phase 1: voice)
 
 ### Fixed

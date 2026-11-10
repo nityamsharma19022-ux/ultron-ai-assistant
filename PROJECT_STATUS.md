@@ -2,6 +2,20 @@
 
 _Last updated: 2026-11-10_
 
+> **ULTRON 2.0 Phase 2 (2026-11-10): speed.** Clear commands (status,
+> timer, alarm, reminder, remember, open app…) skip the AI: 957 ms → 6 ms
+> as a command, 756 ms → 16 ms in chat (sandbox). Cloud AI sources are
+> ranked by measured speed; Instant mode races the two fastest. Ollama
+> stays loaded (`keep_alive=-1`), is warmed at start, and System shows
+> CPU or GPU. Benchmark: `uv run scripts/benchmark_ai.py`. Numbers:
+> [docs/PERFORMANCE_REPORT.md](docs/PERFORMANCE_REPORT.md). Tests: Core
+> 253 passed, App 133, Agent 36. Not yet measured on your PC.
+>
+> **ULTRON 2.0 Phase 1 (2026-11-10): voice.** Windows voice no longer gets
+> stuck: the app records and Core transcribes with faster-whisper
+> (English + Hindi); replies are spoken sentence by sentence.
+> [docs/VOICE_SYSTEM_REPORT.md](docs/VOICE_SYSTEM_REPORT.md).
+>
 > **Round 3 (2026-11-10): FreeLLMAPI.** Core now uses your FreeLLMAPI
 > gateway as its first cloud AI source (never for private chats), can test
 > each AI source from the app, and shows AI usage per model. Full audit:
