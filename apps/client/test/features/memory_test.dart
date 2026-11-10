@@ -100,4 +100,25 @@ void main() {
     await settle(tester);
     expect(backend.preferences['memory_enabled'], isFalse);
   });
+
+  testWidgets('project tags and pausing memory saving', (tester) async {
+    final backend = FakeBackend();
+    backend.preferences = {...backend.preferences, 'memory_enabled': true, 'memory_saving_paused': false};
+    await pumpUltron(tester, backend, signedIn: true, size: _tall);
+    await openMemory(tester);
+
+    await tester.tap(find.byKey(const Key('memory-saving-paused')));
+    await settle(tester);
+    expect(backend.preferences['memory_saving_paused'], isTrue);
+
+    await tester.tap(find.byKey(const Key('add-memory')));
+    await settle(tester);
+    await tester.enterText(find.byKey(const Key('memory-text')), 'Deadline is Friday');
+    await tester.enterText(find.byKey(const Key('memory-project')), ' ULTRON ');
+    await tester.tap(find.byKey(const Key('memory-save')));
+    await settle(tester);
+    final body = backend.bodies['POST /api/v1/memories']! as Map;
+    expect(body['content'], 'Deadline is Friday');
+    expect(body['project'], 'ULTRON');
+  });
 }

@@ -35,8 +35,9 @@ void main() {
     expect(backend.agentHelloBody!['capabilities'], {
       'apps': ['Spotify', 'Camera'],
     });
-    expect(phone.calls.first.$1, 'setAlarm');
-    expect(phone.calls.first.$2, {'hour': 6, 'minute': 30, 'label': 'ULTRON'});
+    final steps = phone.calls.where((c) => c.$1 != 'status').toList(); // 'status' = metrics
+    expect(steps.first.$1, 'setAlarm');
+    expect(steps.first.$2, {'hour': 6, 'minute': 30, 'label': 'ULTRON'});
     expect(backend.stepResults['p1']!['ok'], isTrue);
     expect(backend.stepResults['p1']!['result']['summary'], 'setAlarm done');
     expect(backend.stepResults['p2']!['ok'], isFalse);
@@ -74,5 +75,17 @@ void main() {
     expect(phone.calls.where((c) => c.$1 == 'notify').single.$2!['text'], 'Call mom');
     expect(backend.deliveredReminders, ['r1']);
     expect(find.text('⏰ Reminder: Call mom'), findsOneWidget);
+  });
+
+  testWidgets('the phone reports battery and network for the Command Center', (tester) async {
+    final backend = FakeBackend();
+    final phone = FakePhonePlatform()
+      ..reply = (m, a) => m == 'status'
+          ? {'ok': true, 'battery_percent': 42, 'charging': false, 'network': 'wifi', 'summary': 'x'}
+          : {'ok': true};
+    await pumpUltron(tester, backend, signedIn: true, phonePlatform: phone);
+    await settle(tester, 10);
+    expect(backend.pushedMetrics.first, {'battery_percent': 42, 'charging': false, 'network': 'wifi'});
+    expect(backend.pushedMetrics, hasLength(1)); // not again within a minute
   });
 }

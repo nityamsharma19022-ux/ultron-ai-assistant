@@ -234,7 +234,119 @@ class FakeBackend {
     'enabled': automationEnabled,
     'stopped': automationStopped,
     'stopped_at': null,
+    'levels': levels,
   };
+
+  // ------------------------------------------------ command center
+  final levels = <String, int>{'core': 3, 'pc': 3, 'phone': 3};
+  String activeMode = 'normal';
+  final customModes = <Map<String, dynamic>>[];
+  final notifications = <Map<String, dynamic>>[];
+  final metrics = <Map<String, dynamic>>[];
+  final pushedMetrics = <Map<String, dynamic>>[];
+  final searchHits = <Map<String, dynamic>>[];
+  final upcomingReminders = <Map<String, dynamic>>[];
+  int exports = 0;
+  Map<String, dynamic> notificationSettings = {
+    'quiet_start': null,
+    'quiet_end': null,
+    'utc_offset_minutes': 0,
+    'min_priority': 'normal',
+    'daily_briefing': null,
+  };
+
+  static Map<String, dynamic> mode(String key, String name, {bool quiet = false, bool builtin = true}) => {
+    'key': key,
+    'name': name,
+    'personality': '',
+    'ai_mode': null,
+    'memory': true,
+    'tool_areas': ['core', 'pc', 'phone'],
+    'quiet': quiet,
+    'builtin': builtin,
+  };
+
+  List<Map<String, dynamic>> _modes() => [
+    for (final m in [
+      mode('normal', 'Normal'),
+      mode('work', 'Work'),
+      mode('developer', 'Developer'),
+      mode('study', 'Study'),
+      mode('focus', 'Focus', quiet: true),
+      ...customModes,
+    ])
+      {...m, 'active': m['key'] == activeMode},
+  ];
+
+  Map<String, dynamic> notification(String id, String title, {String priority = 'normal', bool read = false}) => {
+    'id': id,
+    'kind': 'task.failed',
+    'title': title,
+    'body': '',
+    'priority': priority,
+    'task_id': null,
+    'read': read,
+    'announce': !read && priority != 'low',
+    'created_at': '2026-11-10T10:00:00Z',
+  };
+
+  Future<http.StreamedResponse>? _command(http.BaseRequest r, String body) {
+    final path = r.url.path;
+    Future<http.StreamedResponse> ok(Object? data, [int status = 200]) => Future.value(json(status, data));
+    Map<String, dynamic> b() => body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
+    final read = RegExp(r'^/api/v1/notifications/([^/]+)/read$').firstMatch(path);
+    if (read != null && r.method == 'POST') {
+      for (final n in notifications) {
+        if (n['id'] == read.group(1)) n['read'] = true;
+      }
+      return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+    }
+    switch ('${r.method} $path') {
+      case 'GET /api/v1/modes':
+        return ok(_modes());
+      case 'PUT /api/v1/modes/active':
+        final key = b()['key'] as String;
+        if (!_modes().any((m) => m['key'] == key)) return ok({'detail': 'Unknown mode'}, 404);
+        activeMode = key;
+        return ok(_modes().firstWhere((m) => m['key'] == key));
+      case 'POST /api/v1/modes':
+        final u = b();
+        final m = mode((u['name'] as String).toLowerCase().replaceAll(' ', '-'), u['name'] as String, builtin: false);
+        customModes.add(m);
+        return ok({...m, 'active': false}, 201);
+      case 'GET /api/v1/notifications':
+        final unread = r.url.queryParameters['unread'] == 'true';
+        return ok([
+          for (final n in notifications)
+            if (!unread || n['read'] != true) n,
+        ]);
+      case 'POST /api/v1/notifications/read-all':
+        for (final n in notifications) {
+          n['read'] = true;
+        }
+        return ok({'marked': notifications.length});
+      case 'GET /api/v1/notifications/settings':
+        return ok(notificationSettings);
+      case 'PUT /api/v1/notifications/settings':
+        notificationSettings = b();
+        return ok(notificationSettings);
+      case 'GET /api/v1/devices/metrics':
+        return ok(metrics);
+      case 'POST /api/v1/devices/metrics':
+        pushedMetrics.add(b());
+        return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+      case 'GET /api/v1/conversations/search':
+        final q = r.url.queryParameters['q']!.toLowerCase();
+        return ok([
+          for (final h in searchHits)
+            if ((h['snippet'] as String).toLowerCase().contains(q)) h,
+        ]);
+      case 'GET /api/v1/export':
+        exports++;
+        return ok({'format': 'ultron-export/1', 'conversations': conversations, 'memories': memories});
+    }
+    return null;
+  }
 
   Future<http.StreamedResponse>? _more(http.BaseRequest r, String body) {
     final path = r.url.path;
@@ -369,6 +481,11 @@ class FakeBackend {
         final u = b();
         if (u['enabled'] != null) automationEnabled = u['enabled'] as bool;
         if (u['stopped'] == false) automationStopped = false;
+        if (u['levels'] != null) {
+          for (final e in (u['levels'] as Map).entries) {
+            levels[e.key as String] = e.value as int;
+          }
+        }
         return ok(_automation());
       case 'POST /api/v1/automation/emergency-stop':
         automationStopped = true;
@@ -414,7 +531,7 @@ class FakeBackend {
         if (pendingSteps.isEmpty) return Future.value(http.StreamedResponse(const Stream.empty(), 204));
         return ok(pendingSteps.removeAt(0));
       case 'GET /api/v1/reminders':
-        return ok(r.url.queryParameters['due'] == 'true' ? dueReminders : <Object>[]);
+        return ok(r.url.queryParameters['due'] == 'true' ? dueReminders : upcomingReminders);
     }
     return null;
   }
@@ -584,9 +701,11 @@ class FakeBackend {
     if (path == '/api/v1/conversations' && r.method == 'GET') return Future.value(json(200, conversations));
     if (path == '/api/v1/conversations' && r.method == 'POST') {
       final b = body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
-      return Future.value(json(201, addConversation(title: b['title'] as String?, private: b['is_private'] == true)));
+      final c = addConversation(title: b['title'] as String?, private: b['is_private'] == true);
+      if (b['project'] != null) c['project'] = b['project'];
+      return Future.value(json(201, c));
     }
-    if (m == null) return null;
+    if (m == null || m.group(1) == 'search') return null;
     final id = m.group(1)!;
     final c = conversations.where((x) => x['id'] == id).firstOrNull;
     if (c == null) return Future.value(json(404, {'detail': 'Conversation not found'}));
@@ -661,7 +780,7 @@ class FakeBackend {
         return http.StreamedResponse(const Stream.empty(), 204);
     }
     if (!authorized(r)) return json(401, {'detail': 'Not authenticated'});
-    final chat = _chat(r, body) ?? _extras(r, body) ?? _more(r, body);
+    final chat = _chat(r, body) ?? _extras(r, body) ?? _more(r, body) ?? _command(r, body);
     if (chat != null) return chat;
     switch ('${r.method} $path') {
       case 'GET /api/v1/auth/me':
@@ -687,6 +806,7 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   PhonePlatform? phonePlatform,
   FileSource? fileSource,
   List<Override> overrides = const [],
+  AppSection section = AppSection.chat,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -717,6 +837,8 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
     ),
   );
   final container = ProviderScope.containerOf(tester.element(find.byType(UltronApp)));
+  // Most tests start in Chat; the app itself starts on Home.
+  container.read(sectionProvider.notifier).select(section);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   return (container: container, tokens: tokens);

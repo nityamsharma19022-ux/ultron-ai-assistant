@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth/session.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/ultron_theme.dart';
+import 'features/command/command_center_page.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_page.dart';
 import 'features/dashboard/dashboard_page.dart';
@@ -48,6 +49,7 @@ class UltronApp extends ConsumerWidget {
 
 /// The real section pages.
 Map<AppSection, Widget> defaultPages() => {
+  AppSection.home: const CommandCenterPage(),
   AppSection.chat: ChatPage(
     heroBuilder: (context, state, size) => ChatVisualizer(size: size),
     headerOrbBuilder: (context, state, size) => ChatVisualizer(size: size),

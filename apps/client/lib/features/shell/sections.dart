@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum AppSection {
+  home('Home', Icons.space_dashboard_outlined, Icons.space_dashboard),
   chat('Chat', Icons.forum_outlined, Icons.forum),
   tasks('Tasks', Icons.bolt_outlined, Icons.bolt),
   memory('Memory', Icons.psychology_outlined, Icons.psychology),
@@ -18,6 +19,6 @@ final sectionProvider = NotifierProvider<SectionController, AppSection>(SectionC
 
 class SectionController extends Notifier<AppSection> {
   @override
-  AppSection build() => AppSection.chat;
+  AppSection build() => AppSection.home;
   void select(AppSection s) => state = s;
 }

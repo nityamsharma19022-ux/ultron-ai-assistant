@@ -1,13 +1,20 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/api/command_models.dart';
+import '../../core/notices.dart';
+import '../../core/providers.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/session.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/glass_panel.dart';
 import '../../widgets/ultron_logo.dart';
+import '../command/command_controller.dart';
 import '../voice/voice_controller.dart';
 import 'ai_preferences_controller.dart';
 
@@ -28,9 +35,15 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 16),
           const _AiSection(),
           const SizedBox(height: 16),
+          const _ModesSection(),
+          const SizedBox(height: 16),
+          const _NotificationSection(),
+          const SizedBox(height: 16),
           const _AppearanceSection(),
           const SizedBox(height: 16),
           const _VoiceSection(),
+          const SizedBox(height: 16),
+          const _DataSection(),
           const SizedBox(height: 16),
           const _AccountSection(),
           const SizedBox(height: 16),
@@ -214,6 +227,31 @@ class _AppearanceSection extends ConsumerWidget {
       title: 'APPEARANCE',
       subtitle: 'Saved on this device.',
       children: [
+        const Text('Presets', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in ThemePreset.values)
+              ActionChip(
+                key: Key('preset-${p.name}'),
+                avatar: CircleAvatar(backgroundColor: p.accent.color, radius: 7),
+                label: Text(p.label),
+                onPressed: () => n.applyPreset(p),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text('Background', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        SegmentedButton<BackgroundStyle>(
+          key: const Key('background-style'),
+          segments: [for (final b in BackgroundStyle.values) ButtonSegment(value: b, label: Text(b.label))],
+          selected: {s.background},
+          onSelectionChanged: (v) => n.setBackground(v.first),
+        ),
+        const SizedBox(height: 20),
         const Text('Accent colour', style: TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
         Wrap(
@@ -260,6 +298,314 @@ class _AppearanceSection extends ConsumerWidget {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------- modes
+
+class _ModesSection extends ConsumerWidget {
+  const _ModesSection();
+
+  Future<void> _guard(WidgetRef ref, Future<void> Function() action) async {
+    try {
+      await action();
+    } on ApiException catch (e) {
+      ref.read(noticesProvider.notifier).show(e.message);
+    }
+  }
+
+  Future<void> _create(BuildContext context, WidgetRef ref) async {
+    final draft = await showDialog<(String, String, bool)>(context: context, builder: (_) => const _ModeDialog());
+    if (draft == null || draft.$1.trim().isEmpty) return;
+    await _guard(
+      ref,
+      () =>
+          ref.read(modesProvider.notifier).create(name: draft.$1.trim(), personality: draft.$2.trim(), quiet: draft.$3),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final modes = ref.watch(modesProvider);
+    return _Section(
+      key: const Key('modes-settings'),
+      title: 'OPERATING MODE',
+      subtitle:
+          'Changes how ULTRON talks, which AI it prefers, whether it uses memories, what it may act on '
+          'and whether it stays quiet. Synced to all your devices.',
+      children: [
+        modes.when(
+          loading: () => const LinearProgressIndicator(minHeight: 2),
+          error: (e, _) => Text(e is ApiException ? e.message : 'Could not load modes'),
+          data: (list) => Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final m in list)
+                InputChip(
+                  key: Key('mode-option-${m.key}'),
+                  selected: m.active,
+                  showCheckmark: false,
+                  avatar: m.quiet ? const Icon(Icons.notifications_paused_outlined, size: 16) : null,
+                  label: Text(m.name),
+                  tooltip: _describe(m),
+                  // Enabled even when active, so it shows as selected rather than greyed out.
+                  onPressed: () {
+                    if (!m.active) _guard(ref, () => ref.read(modesProvider.notifier).activate(m.key));
+                  },
+                  onDeleted: m.builtin ? null : () => _guard(ref, () => ref.read(modesProvider.notifier).remove(m.key)),
+                ),
+              ActionChip(
+                key: const Key('add-mode'),
+                avatar: const Icon(Icons.add, size: 16),
+                label: const Text('Custom mode'),
+                onPressed: () => _create(context, ref),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _describe(AssistantModeInfo m) => [
+    if (m.personality.isNotEmpty) m.personality,
+    if (m.aiMode != null) 'AI: ${m.aiMode}',
+    if (!m.memory) 'no memories',
+    if (m.toolAreas.length < 3) 'acts on: ${m.toolAreas.isEmpty ? 'nothing' : m.toolAreas.join(', ')}',
+    if (m.quiet) 'quiet',
+  ].join(' · ');
+}
+
+class _ModeDialog extends StatefulWidget {
+  const _ModeDialog();
+
+  @override
+  State<_ModeDialog> createState() => _ModeDialogState();
+}
+
+class _ModeDialogState extends State<_ModeDialog> {
+  final _name = TextEditingController();
+  final _personality = TextEditingController();
+  bool _quiet = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _personality.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: UltronColors.surface,
+    title: const Text('New mode'),
+    content: SizedBox(
+      width: 440,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            key: const Key('mode-name'),
+            controller: _name,
+            autofocus: true,
+            maxLength: 60,
+            decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Exam week'),
+          ),
+          TextField(
+            key: const Key('mode-personality'),
+            controller: _personality,
+            maxLines: 3,
+            maxLength: 2000,
+            decoration: const InputDecoration(
+              labelText: 'How ULTRON should behave',
+              hintText: 'e.g. Short answers, quiz me, no small talk.',
+            ),
+          ),
+          SwitchListTile(
+            key: const Key('mode-quiet'),
+            contentPadding: EdgeInsets.zero,
+            value: _quiet,
+            onChanged: (v) => setState(() => _quiet = v),
+            title: const Text('Quiet (only important notifications)'),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(
+        key: const Key('mode-save'),
+        onPressed: () => Navigator.pop(context, (_name.text, _personality.text, _quiet)),
+        child: const Text('Create'),
+      ),
+    ],
+  );
+}
+
+// -------------------------------------------------------- notifications
+
+final notificationSettingsProvider = FutureProvider<NotificationSettingsInfo>(
+  (ref) => ref.watch(apiProvider).notificationSettings(),
+);
+
+class _NotificationSection extends ConsumerWidget {
+  const _NotificationSection();
+
+  static const priorities = {'low': 'Everything', 'normal': 'Normal and up', 'high': 'Important only'};
+
+  Future<void> _save(WidgetRef ref, NotificationSettingsInfo s) async {
+    try {
+      await ref.read(apiProvider).saveNotificationSettings(s);
+      ref.invalidate(notificationSettingsProvider);
+    } on ApiException catch (e) {
+      ref.read(noticesProvider.notifier).show(e.message);
+    }
+  }
+
+  static NotificationSettingsInfo _with(
+    NotificationSettingsInfo s, {
+    String? Function()? quietStart,
+    String? Function()? quietEnd,
+    String? minPriority,
+    String? Function()? briefing,
+  }) => NotificationSettingsInfo(
+    quietStart: quietStart != null ? quietStart() : s.quietStart,
+    quietEnd: quietEnd != null ? quietEnd() : s.quietEnd,
+    // The phone/PC clock decides "local" time for quiet hours.
+    utcOffsetMinutes: DateTime.now().timeZoneOffset.inMinutes,
+    minPriority: minPriority ?? s.minPriority,
+    dailyBriefing: briefing != null ? briefing() : s.dailyBriefing,
+  );
+
+  Future<String?> _pickTime(BuildContext context, String? current) async {
+    final parts = (current ?? '22:00').split(':');
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+    );
+    if (t == null) return null;
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(notificationSettingsProvider);
+    return _Section(
+      key: const Key('notification-settings'),
+      title: 'NOTIFICATIONS',
+      subtitle: 'Urgent alerts always come through. Everything stays in the bell list.',
+      children: [
+        settings.when(
+          loading: () => const LinearProgressIndicator(minHeight: 2),
+          error: (e, _) => Text(e is ApiException ? e.message : 'Could not load notification settings'),
+          data: (s) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                key: const Key('min-priority'),
+                initialValue: s.minPriority == 'urgent' ? 'high' : s.minPriority,
+                decoration: const InputDecoration(labelText: 'Pop up'),
+                items: [for (final e in priorities.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                onChanged: (v) => _save(ref, _with(s, minPriority: v)),
+              ),
+              SwitchListTile(
+                key: const Key('quiet-hours'),
+                contentPadding: EdgeInsets.zero,
+                value: s.quietStart != null,
+                title: const Text('Quiet hours'),
+                subtitle: Text(s.quietStart == null ? 'Not set' : '${s.quietStart} – ${s.quietEnd}'),
+                onChanged: (on) =>
+                    _save(ref, _with(s, quietStart: () => on ? '22:00' : null, quietEnd: () => on ? '07:00' : null)),
+              ),
+              if (s.quietStart != null)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    OutlinedButton(
+                      key: const Key('quiet-start'),
+                      onPressed: () async {
+                        final t = await _pickTime(context, s.quietStart);
+                        if (t != null) await _save(ref, _with(s, quietStart: () => t));
+                      },
+                      child: Text('From ${s.quietStart}'),
+                    ),
+                    OutlinedButton(
+                      key: const Key('quiet-end'),
+                      onPressed: () async {
+                        final t = await _pickTime(context, s.quietEnd);
+                        if (t != null) await _save(ref, _with(s, quietEnd: () => t));
+                      },
+                      child: Text('Until ${s.quietEnd}'),
+                    ),
+                  ],
+                ),
+              SwitchListTile(
+                key: const Key('daily-briefing'),
+                contentPadding: EdgeInsets.zero,
+                value: s.dailyBriefing != null,
+                title: const Text('Daily briefing'),
+                subtitle: Text(
+                  s.dailyBriefing == null
+                      ? 'Not scheduled'
+                      : 'At ${s.dailyBriefing}: your reminders, tasks and devices for the day',
+                ),
+                onChanged: (on) => _save(ref, _with(s, briefing: () => on ? '08:00' : null)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ----------------------------------------------------------------- data
+
+class _DataSection extends ConsumerStatefulWidget {
+  const _DataSection();
+
+  @override
+  ConsumerState<_DataSection> createState() => _DataSectionState();
+}
+
+class _DataSectionState extends ConsumerState<_DataSection> {
+  bool _busy = false;
+
+  Future<void> _export() async {
+    setState(() => _busy = true);
+    try {
+      final data = await ref.read(apiProvider).exportAllData();
+      await Clipboard.setData(ClipboardData(text: const JsonEncoder.withIndent('  ').convert(data)));
+      final convs = (data['conversations'] as List?)?.length ?? 0;
+      final mems = (data['memories'] as List?)?.length ?? 0;
+      ref
+          .read(noticesProvider.notifier)
+          .show('Copied your data ($convs conversations, $mems memories) to the clipboard as JSON.');
+    } on ApiException catch (e) {
+      ref.read(noticesProvider.notifier).show(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _Section(
+    key: const Key('data-settings'),
+    title: 'YOUR DATA',
+    subtitle:
+        'Export conversations, memories, tasks, reminders, modes and settings as JSON (never passwords '
+        'or sign-in tokens). Full database backups: see the setup guide.',
+    children: [
+      OutlinedButton.icon(
+        key: const Key('export-all'),
+        onPressed: _busy ? null : _export,
+        icon: _busy
+            ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.download_outlined),
+        label: const Text('Export all data'),
+      ),
+    ],
+  );
 }
 
 // ---------------------------------------------------------------- voice

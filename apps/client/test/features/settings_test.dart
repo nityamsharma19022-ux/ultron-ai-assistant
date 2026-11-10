@@ -110,7 +110,9 @@ void main() {
     final app = await pumpUltron(tester, FakeBackend(), signedIn: true, size: _tall);
     await openSection(tester, 'settings');
 
+    await tester.ensureVisible(find.byKey(const Key('accent-violet')));
     await tester.tap(find.byKey(const Key('accent-violet')));
+    await tester.ensureVisible(find.text('Off'));
     await tester.tap(find.text('Off'));
     await settle(tester);
     final s = app.container.read(settingsProvider);
@@ -123,6 +125,7 @@ void main() {
     final app = await pumpUltron(tester, FakeBackend(), signedIn: true, size: _tall);
     await openSection(tester, 'settings');
 
+    await tester.ensureVisible(find.byKey(const Key('speak-replies')));
     await tester.tap(find.byKey(const Key('speak-replies')));
     await tester.pump();
     expect(app.container.read(settingsProvider).speakReplies, isTrue);
@@ -132,6 +135,8 @@ void main() {
     await pumpUltron(tester, FakeBackend(), signedIn: true, size: _tall);
     await openSection(tester, 'settings');
 
+    await tester.ensureVisible(find.byKey(const Key('sign-out')));
+    await tester.pump();
     expect(find.text(ownerEmail), findsOneWidget);
     expect(find.text('Windows PC (windows)'), findsOneWidget);
     await tester.tap(find.byKey(const Key('sign-out')));

@@ -73,9 +73,11 @@ class Conversation {
     required this.isPrivate,
     required this.createdAt,
     required this.updatedAt,
+    this.project,
   });
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
     id: j['id'] as String,
+    project: j['project'] as String?,
     title: j['title'] as String?,
     isPrivate: j['is_private'] as bool? ?? false,
     createdAt: _date(j['created_at']),
@@ -86,6 +88,7 @@ class Conversation {
   final bool isPrivate;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? project;
 
   String get displayTitle => (title?.isNotEmpty ?? false) ? title! : 'New conversation';
 }
@@ -227,12 +230,14 @@ class AiPreferences {
     required this.privateByDefault,
     required this.availableCloudProviders,
     this.memoryEnabled = true,
+    this.memorySavingPaused = false,
   });
   factory AiPreferences.fromJson(Map<String, dynamic> j) => AiPreferences(
     mode: j['mode'] as String? ?? 'auto',
     cloudOrder: [for (final n in (j['cloud_order'] as List? ?? const [])) n as String],
     privateByDefault: j['private_by_default'] as bool? ?? false,
     memoryEnabled: j['memory_enabled'] as bool? ?? true,
+    memorySavingPaused: j['memory_saving_paused'] as bool? ?? false,
     availableCloudProviders: [for (final n in (j['available_cloud_providers'] as List? ?? const [])) n as String],
   );
   final String mode;
@@ -243,21 +248,31 @@ class AiPreferences {
   /// Saved memories are given to the AI in chat.
   final bool memoryEnabled;
 
+  /// ULTRON doesn't save new memories by itself while paused.
+  final bool memorySavingPaused;
+
   Map<String, dynamic> toJson() => {
     'mode': mode,
     'cloud_order': cloudOrder,
     'private_by_default': privateByDefault,
     'memory_enabled': memoryEnabled,
+    'memory_saving_paused': memorySavingPaused,
   };
 
-  AiPreferences copyWith({String? mode, List<String>? cloudOrder, bool? privateByDefault, bool? memoryEnabled}) =>
-      AiPreferences(
-        mode: mode ?? this.mode,
-        cloudOrder: cloudOrder ?? this.cloudOrder,
-        privateByDefault: privateByDefault ?? this.privateByDefault,
-        memoryEnabled: memoryEnabled ?? this.memoryEnabled,
-        availableCloudProviders: availableCloudProviders,
-      );
+  AiPreferences copyWith({
+    String? mode,
+    List<String>? cloudOrder,
+    bool? privateByDefault,
+    bool? memoryEnabled,
+    bool? memorySavingPaused,
+  }) => AiPreferences(
+    mode: mode ?? this.mode,
+    cloudOrder: cloudOrder ?? this.cloudOrder,
+    privateByDefault: privateByDefault ?? this.privateByDefault,
+    memoryEnabled: memoryEnabled ?? this.memoryEnabled,
+    memorySavingPaused: memorySavingPaused ?? this.memorySavingPaused,
+    availableCloudProviders: availableCloudProviders,
+  );
 }
 
 class HealthLive {

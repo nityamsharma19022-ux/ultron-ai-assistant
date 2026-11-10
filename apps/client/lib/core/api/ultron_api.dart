@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../auth/token_store.dart';
 import 'api_exception.dart';
+import 'command_models.dart';
 import 'idle_timeout.dart';
 import 'models.dart';
 import 'sse.dart';
@@ -242,9 +243,68 @@ class UltronApi {
 
   Future<AutomationInfo> automation() async => AutomationInfo.fromJson(await _json('GET', '/api/v1/automation'));
 
-  Future<AutomationInfo> setAutomation({bool? enabled, bool? stopped}) async => AutomationInfo.fromJson(
-    await _json('PUT', '/api/v1/automation', body: {'enabled': ?enabled, 'stopped': ?stopped}),
+  Future<AutomationInfo> setAutomation({bool? enabled, bool? stopped, Map<String, int>? levels}) async =>
+      AutomationInfo.fromJson(
+        await _json('PUT', '/api/v1/automation', body: {'enabled': ?enabled, 'stopped': ?stopped, 'levels': ?levels}),
+      );
+
+  // ---------------------------------------------------- command center
+
+  Future<List<AssistantModeInfo>> modes() async => [
+    for (final m in await _json('GET', '/api/v1/modes') as List) AssistantModeInfo.fromJson(m as Map<String, dynamic>),
+  ];
+
+  Future<AssistantModeInfo> setActiveMode(String key) async =>
+      AssistantModeInfo.fromJson(await _json('PUT', '/api/v1/modes/active', body: {'key': key}));
+
+  Future<AssistantModeInfo> createMode({
+    required String name,
+    String personality = '',
+    bool quiet = false,
+    bool memory = true,
+    List<String> toolAreas = const ['core', 'pc', 'phone'],
+  }) async => AssistantModeInfo.fromJson(
+    await _json(
+      'POST',
+      '/api/v1/modes',
+      body: {'name': name, 'personality': personality, 'quiet': quiet, 'memory': memory, 'tool_areas': toolAreas},
+    ),
   );
+
+  Future<void> deleteMode(String key) => _json('DELETE', '/api/v1/modes/$key', expectBody: false);
+
+  Future<List<NotificationItem>> notifications({bool unread = false, int limit = 50}) async => [
+    for (final n
+        in await _json('GET', '/api/v1/notifications', query: {'unread': '$unread', 'limit': '$limit'}) as List)
+      NotificationItem.fromJson(n as Map<String, dynamic>),
+  ];
+
+  Future<void> markNotificationRead(String id) => _json('POST', '/api/v1/notifications/$id/read', expectBody: false);
+
+  Future<void> markAllNotificationsRead() => _json('POST', '/api/v1/notifications/read-all');
+
+  Future<NotificationSettingsInfo> notificationSettings() async =>
+      NotificationSettingsInfo.fromJson(await _json('GET', '/api/v1/notifications/settings'));
+
+  Future<NotificationSettingsInfo> saveNotificationSettings(NotificationSettingsInfo s) async =>
+      NotificationSettingsInfo.fromJson(await _json('PUT', '/api/v1/notifications/settings', body: s.toJson()));
+
+  Future<List<DeviceMetrics>> deviceMetrics() async => [
+    for (final m in await _json('GET', '/api/v1/devices/metrics') as List)
+      DeviceMetrics.fromJson(m as Map<String, dynamic>),
+  ];
+
+  Future<void> pushMetrics(Map<String, dynamic> values) =>
+      _json('POST', '/api/v1/devices/metrics', body: values, expectBody: false);
+
+  Future<List<SearchHit>> searchConversations(String query, {int limit = 30}) async => [
+    for (final h in await _json('GET', '/api/v1/conversations/search', query: {'q': query, 'limit': '$limit'}) as List)
+      SearchHit.fromJson(h as Map<String, dynamic>),
+  ];
+
+  /// A JSON copy of everything ULTRON stores for you (no passwords/tokens).
+  Future<Map<String, dynamic>> exportAllData() async =>
+      (await _json('GET', '/api/v1/export', timeout: const Duration(seconds: 120)) as Map).cast<String, dynamic>();
 
   Future<AutomationInfo> emergencyStop() async =>
       AutomationInfo.fromJson(await _json('POST', '/api/v1/automation/emergency-stop'));
@@ -278,22 +338,30 @@ class UltronApi {
     String kind = 'note',
     bool pinned = false,
     bool private = false,
+    String? project,
   }) async => MemoryItem.fromJson(
     await _json(
       'POST',
       '/api/v1/memories',
-      body: {'content': content, 'kind': kind, 'pinned': pinned, 'is_private': private},
+      body: {'content': content, 'kind': kind, 'pinned': pinned, 'is_private': private, 'project': ?project},
     ),
   );
 
-  Future<MemoryItem> updateMemory(String id, {String? content, String? kind, bool? pinned, bool? private}) async =>
-      MemoryItem.fromJson(
-        await _json(
-          'PATCH',
-          '/api/v1/memories/$id',
-          body: {'content': ?content, 'kind': ?kind, 'pinned': ?pinned, 'is_private': ?private},
-        ),
-      );
+  /// [project]: null keeps it, "" removes it.
+  Future<MemoryItem> updateMemory(
+    String id, {
+    String? content,
+    String? kind,
+    bool? pinned,
+    bool? private,
+    String? project,
+  }) async => MemoryItem.fromJson(
+    await _json(
+      'PATCH',
+      '/api/v1/memories/$id',
+      body: {'content': ?content, 'kind': ?kind, 'pinned': ?pinned, 'is_private': ?private, 'project': ?project},
+    ),
+  );
 
   Future<void> deleteMemory(String id) => _json('DELETE', '/api/v1/memories/$id', expectBody: false);
 
@@ -365,9 +433,14 @@ class UltronApi {
       Conversation.fromJson(c as Map<String, dynamic>),
   ];
 
-  Future<Conversation> createConversation({bool? isPrivate, String? title}) async => Conversation.fromJson(
-    await _json('POST', '/api/v1/conversations', body: {'is_private': ?isPrivate, 'title': ?title}),
-  );
+  Future<Conversation> createConversation({bool? isPrivate, String? title, String? project}) async =>
+      Conversation.fromJson(
+        await _json(
+          'POST',
+          '/api/v1/conversations',
+          body: {'is_private': ?isPrivate, 'title': ?title, 'project': ?project},
+        ),
+      );
 
   Future<(Conversation, List<ChatMessage>)> conversation(String id) async {
     final j = await _json('GET', '/api/v1/conversations/$id', query: {'limit': '200'}) as Map<String, dynamic>;
@@ -377,10 +450,19 @@ class UltronApi {
     );
   }
 
-  Future<Conversation> updateConversation(String id, {String? title, bool makePrivate = false}) async =>
-      Conversation.fromJson(
-        await _json('PATCH', '/api/v1/conversations/$id', body: {'title': ?title, if (makePrivate) 'is_private': true}),
-      );
+  /// [project]: null keeps it, "" removes it.
+  Future<Conversation> updateConversation(
+    String id, {
+    String? title,
+    bool makePrivate = false,
+    String? project,
+  }) async => Conversation.fromJson(
+    await _json(
+      'PATCH',
+      '/api/v1/conversations/$id',
+      body: {'title': ?title, if (makePrivate) 'is_private': true, 'project': ?project},
+    ),
+  );
 
   Future<void> deleteConversation(String id) => _json('DELETE', '/api/v1/conversations/$id', expectBody: false);
 

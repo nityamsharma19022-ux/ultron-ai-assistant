@@ -70,6 +70,10 @@ class AutomationController extends AsyncNotifier<AutomationInfo> {
   Future<void> setEnabled(bool enabled) async =>
       state = AsyncData(await ref.read(apiProvider).setAutomation(enabled: enabled));
 
+  /// Autonomy level 0-5 for an area ("core", "pc", "phone").
+  Future<void> setLevel(String area, int level) async =>
+      state = AsyncData(await ref.read(apiProvider).setAutomation(levels: {area: level}));
+
   Future<void> clearStop() async => state = AsyncData(await ref.read(apiProvider).setAutomation(stopped: false));
 
   Future<void> emergencyStop() async {

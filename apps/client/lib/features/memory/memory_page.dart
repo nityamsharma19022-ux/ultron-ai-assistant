@@ -34,13 +34,16 @@ class MemoriesController extends AsyncNotifier<List<MemoryItem>> {
     return ref.watch(apiProvider).memories(query: q.isEmpty ? null : q);
   }
 
-  Future<void> add(String content, String kind, {bool pinned = false, bool private = false}) async {
-    await ref.read(apiProvider).createMemory(content, kind: kind, pinned: pinned, private: private);
+  Future<void> add(String content, String kind, {bool pinned = false, bool private = false, String? project}) async {
+    await ref.read(apiProvider).createMemory(content, kind: kind, pinned: pinned, private: private, project: project);
     ref.invalidateSelf();
   }
 
-  Future<void> edit(MemoryItem m, {String? content, String? kind, bool? pinned, bool? private}) async {
-    await ref.read(apiProvider).updateMemory(m.id, content: content, kind: kind, pinned: pinned, private: private);
+  /// [project]: null keeps it, "" removes it.
+  Future<void> edit(MemoryItem m, {String? content, String? kind, bool? pinned, bool? private, String? project}) async {
+    await ref
+        .read(apiProvider)
+        .updateMemory(m.id, content: content, kind: kind, pinned: pinned, private: private, project: project);
     ref.invalidateSelf();
   }
 
@@ -160,6 +163,19 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     _guard(() => ref.read(aiPreferencesProvider.notifier).save(prefs.copyWith(memoryEnabled: v))),
                 title: const Text('Use memories in chat'),
               ),
+            if (prefs != null)
+              SwitchListTile(
+                key: const Key('memory-saving-paused'),
+                contentPadding: EdgeInsets.zero,
+                value: prefs.memorySavingPaused,
+                onChanged: (v) =>
+                    _guard(() => ref.read(aiPreferencesProvider.notifier).save(prefs.copyWith(memorySavingPaused: v))),
+                title: const Text('Pause memory saving'),
+                subtitle: const Text(
+                  'ULTRON won\'t save new memories by itself. You can still add them here.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 8),
             TextField(
               key: const Key('memory-search'),
@@ -204,18 +220,28 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     final c = ref.read(memoriesProvider.notifier);
     await _guard(
       () => existing == null
-          ? c.add(draft.content, draft.kind, pinned: draft.pinned, private: draft.private)
-          : c.edit(existing, content: draft.content, kind: draft.kind, pinned: draft.pinned, private: draft.private),
+          ? c.add(draft.content, draft.kind, pinned: draft.pinned, private: draft.private, project: draft.project)
+          : c.edit(
+              existing,
+              content: draft.content,
+              kind: draft.kind,
+              pinned: draft.pinned,
+              private: draft.private,
+              project: draft.project ?? '',
+            ),
     );
   }
 }
 
 class MemoryDraft {
-  const MemoryDraft(this.content, this.kind, {required this.pinned, required this.private});
+  const MemoryDraft(this.content, this.kind, {required this.pinned, required this.private, this.project});
   final String content;
   final String kind;
   final bool pinned;
   final bool private;
+
+  /// Project tag, or null for a general memory.
+  final String? project;
 }
 
 /// Add or edit a memory. Owns its text field (disposed with the dialog).
@@ -229,6 +255,7 @@ class MemoryDialog extends StatefulWidget {
 
 class _MemoryDialogState extends State<MemoryDialog> {
   late final _text = TextEditingController(text: widget.existing?.content);
+  late final _project = TextEditingController(text: widget.existing?.project);
   late String _kind = widget.existing?.kind ?? 'note';
   late bool _pinned = widget.existing?.pinned ?? false;
   late bool _private = widget.existing?.isPrivate ?? false;
@@ -236,6 +263,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
   @override
   void dispose() {
     _text.dispose();
+    _project.dispose();
     super.dispose();
   }
 
@@ -263,6 +291,16 @@ class _MemoryDialogState extends State<MemoryDialog> {
             items: [for (final e in memoryKinds.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
             onChanged: (v) => setState(() => _kind = v ?? _kind),
           ),
+          TextField(
+            key: const Key('memory-project'),
+            controller: _project,
+            maxLength: 80,
+            decoration: const InputDecoration(
+              labelText: 'Project (optional)',
+              hintText: 'e.g. ULTRON, Thesis',
+              helperText: 'Project memories are only used in that project\'s chats',
+            ),
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _pinned,
@@ -283,8 +321,16 @@ class _MemoryDialogState extends State<MemoryDialog> {
       TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
       FilledButton(
         key: const Key('memory-save'),
-        onPressed: () =>
-            Navigator.pop(context, MemoryDraft(_text.text.trim(), _kind, pinned: _pinned, private: _private)),
+        onPressed: () => Navigator.pop(
+          context,
+          MemoryDraft(
+            _text.text.trim(),
+            _kind,
+            pinned: _pinned,
+            private: _private,
+            project: _project.text.trim().isEmpty ? null : _project.text.trim(),
+          ),
+        ),
         child: const Text('Save'),
       ),
     ],
@@ -316,6 +362,7 @@ class _MemoryTile extends ConsumerWidget {
                   Text(
                     [
                       memoryKinds[memory.kind] ?? memory.kind,
+                      if (memory.project != null) '📁 ${memory.project}',
                       if (memory.isPrivate) 'private',
                       if (memory.source != 'user') 'saved by a task',
                       if (memory.lastUsedAt != null) 'last used ${memory.lastUsedAt.toString().substring(0, 10)}',

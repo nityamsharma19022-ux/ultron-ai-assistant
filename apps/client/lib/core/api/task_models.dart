@@ -142,12 +142,42 @@ class PermissionInfo {
 }
 
 class AutomationInfo {
-  const AutomationInfo({required this.enabled, required this.stopped});
-  factory AutomationInfo.fromJson(Map<String, dynamic> j) =>
-      AutomationInfo(enabled: j['enabled'] as bool? ?? true, stopped: j['stopped'] as bool? ?? false);
+  const AutomationInfo({
+    required this.enabled,
+    required this.stopped,
+    this.levels = const {'core': 3, 'pc': 3, 'phone': 3},
+    this.levelNames = defaultLevelNames,
+  });
+  factory AutomationInfo.fromJson(Map<String, dynamic> j) => AutomationInfo(
+    enabled: j['enabled'] as bool? ?? true,
+    stopped: j['stopped'] as bool? ?? false,
+    levels: {
+      'core': 3,
+      'pc': 3,
+      'phone': 3,
+      for (final e in _map(j['levels']).entries) e.key: (e.value as num).toInt(),
+    },
+    levelNames: {
+      ...defaultLevelNames,
+      for (final e in _map(j['level_names']).entries) int.parse(e.key): e.value as String,
+    },
+  );
   final bool enabled;
   final bool stopped;
+
+  /// Autonomy level 0-5 per area: core, pc, phone.
+  final Map<String, int> levels;
+  final Map<int, String> levelNames;
   bool get running => enabled && !stopped;
+
+  static const defaultLevelNames = {
+    0: 'Answer only',
+    1: 'Suggest',
+    2: 'Prepare',
+    3: 'Execute approved',
+    4: 'Safe routines',
+    5: 'Complex workflows',
+  };
 }
 
 class MemoryItem {
@@ -160,8 +190,10 @@ class MemoryItem {
     required this.pinned,
     required this.updatedAt,
     this.lastUsedAt,
+    this.project,
   });
   factory MemoryItem.fromJson(Map<String, dynamic> j) => MemoryItem(
+    project: j['project'] as String?,
     id: j['id'] as String,
     content: j['content'] as String,
     kind: j['kind'] as String? ?? 'note',
@@ -179,6 +211,9 @@ class MemoryItem {
   final bool pinned;
   final DateTime updatedAt;
   final DateTime? lastUsedAt;
+
+  /// Optional project tag (recalled only in that project's chats).
+  final String? project;
 }
 
 class ActivityItem {

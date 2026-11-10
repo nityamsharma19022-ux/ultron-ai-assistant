@@ -13,6 +13,8 @@ import '../../widgets/ultron_background.dart';
 import '../../widgets/ultron_logo.dart';
 import '../agent/phone_agent.dart';
 import '../assistant/assistant_screen.dart';
+import '../command/command_center_page.dart';
+import '../command/command_controller.dart';
 import '../settings/ai_preferences_controller.dart';
 import '../voice/voice_controller.dart';
 import 'sections.dart';
@@ -53,6 +55,8 @@ class AppShell extends ConsumerWidget {
     // reminders are shown on every device.
     ref.listen(phoneAgentProvider, (_, _) {});
     ref.listen(reminderWatcherProvider, (_, _) {});
+    // Notifications are checked app-wide; new important ones pop up.
+    ref.listen(notificationsProvider, (_, _) {});
     final page = AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,
@@ -125,11 +129,19 @@ class _Sidebar extends ConsumerWidget {
           for (final s in AppSection.values)
             _NavItem(section: s, selected: s == section, onTap: () => ref.read(sectionProvider.notifier).select(s)),
           const Spacer(),
-          OutlinedButton.icon(
-            key: const Key('open-assistant'),
-            onPressed: () => AssistantScreen.open(context),
-            icon: const Icon(Icons.graphic_eq),
-            label: const Text('Assistant'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('open-assistant'),
+                  onPressed: () => AssistantScreen.open(context),
+                  icon: const Icon(Icons.graphic_eq),
+                  label: const Text('Assistant'),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const NotificationBell(),
+            ],
           ),
           const SizedBox(height: 16),
           const ConnectionIndicator(),
@@ -248,9 +260,16 @@ class _TopBar extends StatelessWidget {
     child: Row(
       children: [
         const UltronLogo(size: 15),
-        const Spacer(),
-        const ConnectionIndicator(compact: true),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(fit: BoxFit.scaleDown, child: ConnectionIndicator(compact: true)),
+          ),
+        ),
+        const NotificationBell(),
         IconButton(
+          visualDensity: VisualDensity.compact,
           key: const Key('open-assistant'),
           tooltip: 'Assistant',
           onPressed: () => AssistantScreen.open(context),

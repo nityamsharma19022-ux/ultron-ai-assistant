@@ -27,6 +27,10 @@ final phoneAgentProvider = NotifierProvider<PhoneAgent, PhoneAgentState>(PhoneAg
 class PhoneAgent extends Notifier<PhoneAgentState> {
   int _generation = 0;
   Duration idleDelay = const Duration(seconds: 1);
+
+  /// How often the phone reports battery and network to the Command Center.
+  Duration metricsEvery = const Duration(seconds: 60);
+  DateTime? _lastMetrics;
   Timer? _sleepTimer;
   Completer<void>? _sleeping;
 
@@ -86,6 +90,7 @@ class PhoneAgent extends Notifier<PhoneAgentState> {
           await api.agentHello(phoneTools, capabilities: {'apps': apps.take(100).toList()}, version: 'app');
           greeted = true;
         }
+        await _maybePushMetrics();
         final work = await api.nextStep();
         if (gen != _generation) return;
         backoff = const Duration(seconds: 2);
@@ -102,6 +107,23 @@ class PhoneAgent extends Notifier<PhoneAgentState> {
         await _sleep(backoff);
         backoff = backoff * 2 > const Duration(seconds: 60) ? const Duration(seconds: 60) : backoff * 2;
       }
+    }
+  }
+
+  Future<void> _maybePushMetrics() async {
+    final now = DateTime.now();
+    if (_lastMetrics != null && now.difference(_lastMetrics!) < metricsEvery) return;
+    _lastMetrics = now;
+    try {
+      final s = await _phone.call('status');
+      final values = <String, dynamic>{
+        if (s['battery_percent'] is num) 'battery_percent': s['battery_percent'],
+        if (s['charging'] is bool) 'charging': s['charging'],
+        if (s['network'] is String) 'network': s['network'],
+      };
+      if (values.isNotEmpty) await ref.read(apiProvider).pushMetrics(values);
+    } on Object {
+      // Metrics are optional; steps keep running.
     }
   }
 

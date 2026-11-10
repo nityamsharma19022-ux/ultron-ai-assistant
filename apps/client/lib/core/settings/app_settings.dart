@@ -17,6 +17,34 @@ enum MotionLevel {
       MotionLevel.values.firstWhere((m) => m.name == name, orElse: () => MotionLevel.full);
 }
 
+/// The backdrop behind every screen.
+enum BackgroundStyle {
+  grid('Grid'),
+  aurora('Aurora'),
+  stars('Stars'),
+  plain('Plain');
+
+  const BackgroundStyle(this.label);
+  final String label;
+
+  static BackgroundStyle fromName(String? name) =>
+      BackgroundStyle.values.firstWhere((b) => b.name == name, orElse: () => BackgroundStyle.grid);
+}
+
+/// One-tap looks: accent + background + motion.
+enum ThemePreset {
+  ultron('ULTRON', UltronAccent.cyan, BackgroundStyle.grid, MotionLevel.full),
+  nebula('Nebula', UltronAccent.violet, BackgroundStyle.aurora, MotionLevel.full),
+  ember('Ember', UltronAccent.amber, BackgroundStyle.stars, MotionLevel.full),
+  minimal('Minimal', UltronAccent.emerald, BackgroundStyle.plain, MotionLevel.reduced);
+
+  const ThemePreset(this.label, this.accent, this.background, this.motion);
+  final String label;
+  final UltronAccent accent;
+  final BackgroundStyle background;
+  final MotionLevel motion;
+}
+
 /// Non-secret, per-device preferences. Login tokens live in secure storage
 /// (see token_store.dart), never here.
 @immutable
@@ -25,6 +53,7 @@ class AppSettings {
     required this.backendUrl,
     this.accent = UltronAccent.cyan,
     this.motion = MotionLevel.full,
+    this.background = BackgroundStyle.grid,
     this.speakReplies = false,
     this.speechRate = 0.5,
     this.voiceLocale,
@@ -37,6 +66,7 @@ class AppSettings {
   final String? tlsFingerprint;
   final UltronAccent accent;
   final MotionLevel motion;
+  final BackgroundStyle background;
   final bool speakReplies;
   final double speechRate;
   final String? voiceLocale;
@@ -45,6 +75,7 @@ class AppSettings {
     String? backendUrl,
     UltronAccent? accent,
     MotionLevel? motion,
+    BackgroundStyle? background,
     bool? speakReplies,
     double? speechRate,
     String? voiceLocale,
@@ -53,6 +84,7 @@ class AppSettings {
     backendUrl: backendUrl ?? this.backendUrl,
     accent: accent ?? this.accent,
     motion: motion ?? this.motion,
+    background: background ?? this.background,
     speakReplies: speakReplies ?? this.speakReplies,
     speechRate: speechRate ?? this.speechRate,
     voiceLocale: voiceLocale ?? this.voiceLocale,
@@ -88,6 +120,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _kBackend = 'backend_url';
   static const _kAccent = 'accent';
   static const _kMotion = 'motion';
+  static const _kBackground = 'background';
   static const _kSpeak = 'speak_replies';
   static const _kRate = 'speech_rate';
   static const _kLocale = 'voice_locale';
@@ -102,6 +135,7 @@ class SettingsController extends Notifier<AppSettings> {
       backendUrl: p.getString(_kBackend) ?? defaultBackendUrl(),
       accent: UltronAccent.fromName(p.getString(_kAccent)),
       motion: MotionLevel.fromName(p.getString(_kMotion)),
+      background: BackgroundStyle.fromName(p.getString(_kBackground)),
       speakReplies: p.getBool(_kSpeak) ?? false,
       speechRate: p.getDouble(_kRate) ?? 0.5,
       voiceLocale: p.getString(_kLocale),
@@ -130,6 +164,17 @@ class SettingsController extends Notifier<AppSettings> {
     state = state.copyWith(motion: motion);
   }
 
+  Future<void> setBackground(BackgroundStyle value) async {
+    await _prefs.setString(_kBackground, value.name);
+    state = state.copyWith(background: value);
+  }
+
+  Future<void> applyPreset(ThemePreset preset) async {
+    await setAccent(preset.accent);
+    await setBackground(preset.background);
+    await setMotion(preset.motion);
+  }
+
   Future<void> setSpeakReplies(bool value) async {
     await _prefs.setBool(_kSpeak, value);
     state = state.copyWith(speakReplies: value);
@@ -147,6 +192,7 @@ class SettingsController extends Notifier<AppSettings> {
         backendUrl: state.backendUrl,
         accent: state.accent,
         motion: state.motion,
+        background: state.background,
         speakReplies: state.speakReplies,
         speechRate: state.speechRate,
         tlsFingerprint: state.tlsFingerprint,
