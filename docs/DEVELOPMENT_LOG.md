@@ -1,0 +1,65 @@
+# ULTRON development log
+
+Newest first. Each entry: what was done, how it was checked, what's left.
+
+## 2026-11-10 — Round 2: toward an AI operating system
+
+Owner request: the "ULTRON ultimate master prompt" (autonomous
+development; AI brain, memory, companions, proactive AI, command center,
+security). Security limits stay in force: important actions need
+approval, no covert monitoring, credentials stay out of the code.
+
+**R2-1 Autonomy levels and operating modes** (commit `c7bf9ed`)
+- Levels 0–5 per area mapped onto the existing permission engine. Level 0
+  hides that area's tools from the planner; level 5 allows plans up to 20
+  steps. Class B/C and always-ask scopes still ask.
+- Modes change the system prompt, routing, memory use, allowed areas and
+  quiet notifications. Migration `0006`.
+
+**R2-2 Notifications, proactive engine, device metrics** (`c7bf9ed`)
+- Deduplicated notifications; proactive rules run every 30 s in the task
+  engine. Metrics stored in Redis for 3 minutes.
+
+**R2-3 New PC and web tools, task-type routing** (`c7bf9ed`)
+- Agent tools: copy, rename, running programs, close app (always asks;
+  never touches the agent or its parents; apps started with arguments are
+  matched by their full command line), open link, Windows toast.
+- `web.read`: every host and redirect resolved and refused if not a public
+  address (incl. IPv4-mapped loopback and cloud metadata addresses).
+
+**R2-4 Search, projects, memory pause, export, safety pause** (`9b5dad7`)
+- Migration `0007`: message search index, project columns, memory pause.
+
+**R2-5 Command Center UI** (`e341006`)
+- Home screen with widgets and floating panels; bell; modes, quiet hours,
+  daily briefing, background styles, export in Settings; conversation
+  search; memory projects; phone metrics.
+- Tests found real layout overflows (phone top bar, sidebar, autonomy
+  rows); fixed before commit.
+
+**Planner rules added** for "close <app>" (always asks) and "open
+<web address>", so these work without any AI.
+
+**Checks**
+- Backend: **221 passed** with real PostgreSQL + Redis; ruff clean.
+- Agent: **36 passed** on Linux (+1 Windows-only; Windows CI on push).
+- App: `flutter analyze` clean; **116 passed**.
+- Live run: Core rebuilt in Docker (migration `0007` applied); the web
+  build was used in Chromium at desktop and phone sizes. The live
+  proactive engine produced real notifications (approvals waiting, low
+  phone battery from pushed metrics, daily briefing) that showed up in the
+  bell and Command Center.
+- Release APK builds (58.7 MB). Not installed on a phone.
+
+**Not done / next:** semantic memory, sync, external integrations,
+keyboard/mouse automation, wake word on Windows, custom background image,
+scoped agent tokens. Device checks on your PC and phone.
+
+## 2026-11-10 — Round 1: master build (stages 0–8)
+Memory, documents, task engine, Windows agent, Android assistant, pairing
+and HTTPS. Details and results:
+[ULTRON_BUILD_STATUS.md](ULTRON_BUILD_STATUS.md).
+
+## Earlier phases
+Core backend, AI router, chat API, Flutter app. See
+[../PROJECT_STATUS.md](../PROJECT_STATUS.md).

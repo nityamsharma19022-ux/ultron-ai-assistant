@@ -27,7 +27,7 @@ String _posKey(String id) => 'command_panel_$id';
 const quickCommands = [
   ('How is my PC doing', Icons.memory),
   ('Organize my downloads', Icons.folder_copy_outlined),
-  ('What are my reminders', Icons.alarm),
+  ('Check my phone', Icons.smartphone),
   ('Open VS Code', Icons.code),
 ];
 

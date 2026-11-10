@@ -2,6 +2,20 @@
 
 _Last updated: 2026-11-10_
 
+> **Round 2 (2026-11-10): toward a personal AI operating system.** The app
+> now opens on a **Command Center** (live devices, tasks, reminders,
+> notifications, AI activity, autonomy; floating panels on desktop).
+> New: autonomy levels 0–5 per area, operating modes, proactive
+> notifications with quiet hours and a daily briefing, automatic safety
+> pause, conversation search, project memories, pause memory saving, full
+> data export, routing by task type, safe web reading, and new Windows
+> agent tools (copy, rename, running programs, close app, open links,
+> toasts, live metrics). Roadmap: [docs/ULTRON_ROADMAP.md](docs/ULTRON_ROADMAP.md);
+> feature status: [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md); log:
+> [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md); limitations:
+> [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md); [CHANGELOG.md](CHANGELOG.md).
+> Still needs your PC and phone for the device checks.
+>
 > **Master build (2026-11-10):** ULTRON now has memory, documents, an
 > autonomous task engine with permissions, a Windows agent, an Android
 > system assistant and secure pairing. Current state and test results:

@@ -38,7 +38,7 @@ docker compose exec core ultron-core create-owner --email you@example.com
 ```
 
 Check: `http://127.0.0.1:8000/health/ready` shows `"status": "ready"` and
-database revision `0005` (migrations run automatically).
+database revision `0007` (migrations run automatically).
 
 ## 4. Let the phone reach the PC (optional, recommended with HTTPS)
 
@@ -67,10 +67,22 @@ security code matches. The Windows agent pairs with
 `uv run ultron-agent pair`.
 
 ## 6. Daily use
-- Talk: chat, or **Tasks** command bar ("organize my downloads", "open
-  VS Code", "remind me to stretch at 9 pm", "prepare my weekly study plan").
-- Allow routine actions once in **Tasks → Permissions**; important
-  changes always ask. **STOP ALL** stops everything.
+- **Home** is the Command Center: type or say a command, see your devices,
+  tasks, reminders and notifications. On the PC you can switch to
+  floating panels and drag them anywhere.
+- Talk: chat, or the command bar ("organize my downloads", "open VS Code",
+  "remind me to stretch at 9 pm", "prepare my weekly study plan").
+- **Autonomy** (Home → Autonomy): 0 answer only … 3 run what you allowed
+  (default) … 5 complex workflows, separately for Core, PC and phone.
+  Deleting, closing apps and other important changes always ask.
+- **Operating mode** (Home or Settings): Normal, Work, Developer, Study,
+  Focus (quiet), or your own.
+- Allow routine actions once in **Tasks → Permissions**. **STOP ALL** stops
+  everything. If many tasks fail at once, ULTRON pauses automation by
+  itself and tells you.
+- **Notifications** (bell): quiet hours and a daily briefing in Settings.
+- Optional: prefer providers per kind of request in `.env`, e.g.
+  `ULTRON_AI_TASK_PROFILES=coding=groq,openrouter;reasoning=gemini`.
 - Phone: make ULTRON the digital assistant and invoke it with the
   assistant gesture.
 
@@ -84,6 +96,13 @@ security code matches. The Windows agent pairs with
 - `scripts/windows/Invoke-UltronEnvironmentAudit.ps1` makes a verified
   copy of the project folder (without `.env` and dependencies).
 - Memories can be exported anytime (Memory → ⋮ → Export).
+- Everything (conversations, memories, tasks, reminders, modes, settings;
+  no passwords or tokens) as JSON: **Settings → Your data → Export all
+  data**, or on the PC:
+  ```powershell
+  docker compose exec core ultron-core export --email you@example.com --out /tmp/ultron.json
+  docker compose cp core:/tmp/ultron.json D:\ULTRON\backups\ultron.json
+  ```
 
 ## 8. Troubleshooting
 | Symptom | Fix |

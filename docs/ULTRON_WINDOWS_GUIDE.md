@@ -65,7 +65,11 @@ Undo the last "organize": `uv run ultron-agent undo`.
 ## 3. What to try (and check in Tasks → Activity)
 | Say or type | What happens |
 |---|---|
-| "how is my PC doing" | CPU, memory, disk, battery |
+| "how is my PC doing" | CPU, memory, disk, battery (also live on Home → Devices) |
+| "close Chrome" | Asks first, then closes it (only apps in `[apps]`) |
+| "copy report.pdf from downloads to documents" / "rename …" | Copy or rename inside your folders (overwriting asks). Uses the AI planner, so cloud or local AI must be available |
+| "open github.com" | Opens the link in your browser (http/https only) |
+| "show me a notification …" | Windows notification |
 | "open VS Code" / "switch to Chrome" | Opens / brings the window to the front |
 | "organize my downloads" (or "… by date") | Sorts files into folders (asks first until you allow it) |
 | "run the dev environment workflow" | Your fixed commands |
@@ -79,5 +83,8 @@ Undo the last "organize": `uv run ultron-agent undo`.
 - [ ] "open VS Code" opens it; "switch to VS Code" brings it forward
 - [ ] "organize my downloads" asks, then sorts; `ultron-agent undo` restores
 - [ ] A workflow runs and its result appears in the task
+- [ ] Home → Devices shows this PC's CPU and memory within a minute
+- [ ] "close VS Code" asks first, then closes it
+- [ ] A ULTRON notification appears as a Windows notification
 - [ ] Install-UltronAgent.ps1: the agent starts after signing in to Windows
 - [ ] Local AI: Ollama with `qwen3.5:4b` answers a private chat

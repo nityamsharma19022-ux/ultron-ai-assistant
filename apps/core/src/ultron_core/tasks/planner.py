@@ -190,10 +190,25 @@ _RULES: list[tuple[re.Pattern[str], str]] = [
         "remind",
     ),
     (
+        # A web address: has a dot and a letters-only ending that isn't a program file.
+        re.compile(
+            r"^(?:open|go to|visit|browse to)\s+(?P<url>(?:https?://)?[\w-]+(?:\.[\w-]+)*"
+            r"\.(?!(?:exe|lnk|bat|cmd|msi|ps1)\b)[a-z]{2,24}(?:[/?#]\S*)?)$",
+            re.I,
+        ),
+        "url",
+    ),
+    (
         re.compile(
             r"^(?:open|launch|start)\s+(?:the\s+)?(?P<app>[\w .+#-]{1,60}?)(?:\s+app)?$", re.I
         ),
         "open",
+    ),
+    (
+        re.compile(
+            r"^(?:close|quit|exit)\s+(?:the\s+)?(?P<app>[\w .+#-]{1,60}?)(?:\s+app)?$", re.I
+        ),
+        "close",
     ),
     (re.compile(r"^(?:switch to|go to|show)\s+(?P<app>[\w .+#-]{1,60})$", re.I), "focus"),
     (
@@ -235,6 +250,17 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
                     "args": {"text": m.group("text"), "due_at": due.isoformat()},
                 }
             ]
+        elif kind == "url":
+            if not available(ctx, "pc.web.open"):
+                return None
+            url = m.group("url")
+            if not url.lower().startswith(("http://", "https://")):
+                url = "https://" + url
+            raw = [{"tool": "pc.web.open", "args": {"url": url}}]
+        elif kind == "close":
+            if not available(ctx, "pc.apps.close"):
+                return None
+            raw = [{"tool": "pc.apps.close", "args": {"app": m.group("app").strip()}}]
         elif kind in ("open", "focus"):
             tool = (
                 _device_tool(ctx, "pc.apps.open", "phone.apps.open")

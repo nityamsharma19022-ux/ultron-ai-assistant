@@ -34,11 +34,19 @@ permissions.
 | `documents/` | Upload, text extraction (PDF, DOCX, XLSX, text), chunks, search |
 | `tasks/` | Tool registry, planner, permissions, engine, agent protocol, reminders, schedules, `POST /assistant/command` |
 | `activity.py` | Audit log shown to the user |
+| `modes.py` | Operating modes (built-in + custom): prompt, routing, memory use, allowed areas, quiet |
+| `notifications.py` | Notifications (priority, dedupe, quiet hours), notification settings, device metrics (Redis, 3 min) |
+| `proactive.py` | Proactive rules run by the task engine every 30 s (failed tasks, approvals, reminders, offline devices, low battery, paused tasks, daily briefing) |
+| `safety.py` | Automatic safety pause (failure burst, task flood) |
+| `web.py` | `web.read`: public web pages only, every redirect re-checked |
+| `ai/profiles.py` | Routing by task type (`ULTRON_AI_TASK_PROFILES`) |
+| `backup.py` | JSON export of a user's data (`GET /export`, `ultron-core export`) |
 
-Database tables (Alembic migrations `0001`–`0005`): users, devices,
+Database tables (Alembic migrations `0001`–`0007`): users, devices,
 refresh_tokens, conversations, messages, user_ai_preferences, memories,
 activity_events, tasks, task_steps, permission_grants, automation_state,
-agents, reminders, schedules, documents, document_chunks.
+agents, reminders, schedules, documents, document_chunks,
+assistant_modes, notifications, notification_settings.
 
 ### Model adapters
 Every provider implements `ChatProvider` (`ai/providers/base.py`):
@@ -56,9 +64,12 @@ definitions are sent to models**.
    workflows. Its answer is parsed as JSON; every tool must exist and every
    argument is validated (`tasks/tools.py`). Questions get an answer
    instead of a task.
-3. **Permission check** per step (`tasks/permissions.py`): class A runs if
-   its scope is granted; B and C always ask; master switch and emergency
-   stop block everything.
+3. **Permission check** per step (`tasks/permissions.py`): B and C and
+   always-ask scopes (delete, close app) always ask; class A depends on the
+   area's **autonomy level**: 0 answer only (tools hidden), 1 always ask,
+   2 read-only runs, 3 granted scopes run (default), 4 all class A runs,
+   5 like 4 with plans up to 20 steps. Master switch, emergency stop and
+   the automatic safety pause block everything.
 4. **Execution** (`tasks/engine.py`): Core tools run in Core; PC and phone
    steps wait for that device's agent, which claims them by long poll and
    reports the result. Results can be passed to later steps
@@ -86,11 +97,16 @@ inside an allowed folder; apps and workflows are fixed argument lists from
 its own config (no shell). See `docs/ULTRON_WINDOWS_GUIDE.md`.
 
 ## D. Control Center (`apps/client`)
-Flutter app for Windows and Android: chat with streaming, animated AI
-visualizer, Tasks (command bar, approvals, controls, STOP ALL,
-permissions, activity), Memory (memories and documents), System (Core,
-AI sources, local model, agents, assistant, devices, pairing), Settings
-(AI routing, appearance, voice, account).
+Flutter app for Windows and Android: **Home** (Command Center: clock,
+mode, command bar, quick commands, live panels for devices, tasks,
+reminders, notifications, AI activity and autonomy; floating draggable
+panels on desktop), chat with streaming and conversation search, animated
+AI visualizer, Tasks (command bar, approvals, controls, STOP ALL,
+permissions, activity), Memory (memories with projects, documents),
+System (Core, AI sources, local model, agents, assistant, devices,
+pairing), Settings (AI routing, operating mode, notifications,
+appearance, voice, data export, account). A notification bell is always
+visible.
 
 ## Data flow and privacy
 - Apps talk only to ULTRON Core; Core talks to AI providers. Keys stay in

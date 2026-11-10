@@ -133,6 +133,26 @@ def test_rules() -> None:
     assert planner.rule_plan("pc status", limited).steps[0].tool == "pc.status"
 
 
+def test_close_and_web_rules() -> None:
+    c = ctx(targets={"core", "windows"})
+    p = planner.rule_plan("close Chrome", c)
+    assert [(s.tool, s.args, s.risk) for s in p.steps] == [
+        ("pc.apps.close", {"app": "Chrome"}, "B")
+    ]
+    p = planner.rule_plan("open github.com/anthropics", c)
+    assert p.steps[0].tool == "pc.web.open"
+    assert p.steps[0].args == {"url": "https://github.com/anthropics"}
+    assert (
+        planner.rule_plan("visit https://example.org", c).steps[0].args["url"]
+        == "https://example.org"
+    )
+    # Program files and app names stay apps.
+    assert planner.rule_plan("open notepad.exe", c).steps[0].tool == "pc.apps.open"
+    assert planner.rule_plan("open VS Code", c).steps[0].tool == "pc.apps.open"
+    # No PC: nothing to close.
+    assert planner.rule_plan("close chrome", ctx(targets={"core", "android"})) is None
+
+
 def test_time_zone_fallbacks() -> None:
     assert planner.zone("Asia/Kolkata").key == "Asia/Kolkata"
     ist = planner.zone(None, 330)

@@ -25,10 +25,15 @@ Ollama.
 | — | Control Center screens for the above | ✅ Tasks, Permissions, Activity, Memory, Agents, Assistant |
 | 8 | QA, docs, release report | ✅ Done in the sandbox; device checks are yours (see below) |
 
+| R2 | Round 2: autonomy levels, modes, proactive notifications, Command Center, search, projects, export, safety pause, new PC/web tools | ✅ Built and tested; see [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) |
+
 **Release verdict:** built and tested as far as possible without your PC
 and phone; **not yet a complete first release** until the device checks
 in [ULTRON_RELEASE_CHECKLIST.md](ULTRON_RELEASE_CHECKLIST.md) pass.
-| 8 | QA, docs, release report | ⏳ |
+
+Feature-by-feature status: [FEATURE_STATUS.md](FEATURE_STATUS.md);
+roadmap: [ULTRON_ROADMAP.md](ULTRON_ROADMAP.md); limitations:
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Stage 0 — Audit (2026-11-10)
 - Branch `claude/fervent-lovelace-fqank5`, local = GitHub = `9e99a21`, clean
@@ -230,14 +235,16 @@ in [ULTRON_RELEASE_CHECKLIST.md](ULTRON_RELEASE_CHECKLIST.md) pass.
   [ULTRON_RELEASE_CHECKLIST](ULTRON_RELEASE_CHECKLIST.md).
 
 ## Test results (latest run, 2026-11-10)
-- Backend: **203 passed, 11 skipped** (live Ollama tests), ruff clean.
-- App: **103 passed**, `flutter analyze` clean, release APK and web build.
-- Agent: **31 passed** (+1 Windows-only DPAPI test, runs in CI on Windows).
+- Backend: **221 passed** (+11 live-Ollama tests not run here), ruff clean.
+- App: **116 passed**, `flutter analyze` clean, release APK (58.7 MB) and
+  web build.
+- Agent: **36 passed** (+1 Windows-only DPAPI test, runs in CI on Windows).
+- Live check: Core rebuilt in Docker at migration `0007`; the web build
+  in Chromium (1600 px desktop, 412 px phone) showed the Command Center
+  with live metrics and real proactive notifications.
 
 ## Known bugs
-- None open. Known limitations: no wake word (Android restriction,
-  documented); images, scanned PDFs and audio files can't be read; phone
-  steps run only while the app is open; no QR pairing.
+- None open. Limitations: [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Device-only verification still required
 - iQOO: install the APK, pair over HTTPS, choose ULTRON as the digital
