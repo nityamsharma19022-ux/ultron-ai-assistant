@@ -111,6 +111,9 @@ class Settings(BaseSettings):
     freellmapi_api_key: SecretStr | None = None
     freellmapi_model: str | None = "auto"
     freellmapi_base_url: str | None = "http://127.0.0.1:31415/v1"
+    # Used for Instant / Deep response modes when the model is "auto".
+    freellmapi_fast_model: str = "auto:fast"
+    freellmapi_smart_model: str = "auto:smart"
     groq_api_key: SecretStr | None = None
     groq_model: str | None = None
     groq_base_url: str = "https://api.groq.com/openai/v1"

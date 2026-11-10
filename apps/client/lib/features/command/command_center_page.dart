@@ -11,6 +11,8 @@ import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/ultron_colors.dart';
+import '../../core/time_format.dart';
+import '../settings/ai_preferences_controller.dart';
 import '../../widgets/glass_panel.dart';
 import '../shell/sections.dart';
 import '../tasks/tasks_controller.dart';
@@ -275,14 +277,14 @@ class _Panel extends StatelessWidget {
 
 // ------------------------------------------------------------------ header
 
-class _Clock extends StatefulWidget {
+class _Clock extends ConsumerStatefulWidget {
   const _Clock();
 
   @override
-  State<_Clock> createState() => _ClockState();
+  ConsumerState<_Clock> createState() => _ClockState();
 }
 
-class _ClockState extends State<_Clock> {
+class _ClockState extends ConsumerState<_Clock> {
   Timer? _timer;
   DateTime _now = DateTime.now();
 
@@ -303,20 +305,37 @@ class _ClockState extends State<_Clock> {
 
   @override
   Widget build(BuildContext context) {
-    final h = _now.hour, m = _now.minute.toString().padLeft(2, '0');
-    final greeting = h < 5
-        ? 'Working late'
-        : h < 12
-        ? 'Good morning'
-        : h < 17
-        ? 'Good afternoon'
-        : 'Good evening';
+    final h = _now.hour;
+    final h24 = ref.watch(use24HourProvider);
+    final address = ref.watch(aiPreferencesProvider.select((p) => p.value?.addressAs ?? 'Sir'));
+    final greeting =
+        (h < 5
+            ? 'Working late'
+            : h < 12
+            ? 'Good morning'
+            : h < 17
+            ? 'Good afternoon'
+            : 'Good evening') +
+        (address.isEmpty ? '' : ', $address');
+    final time = clockText(_now.hour, _now.minute, h24: h24);
+    final suffix = h24 ? '' : time.substring(time.length - 2);
+    final digits = h24 ? time : time.substring(0, time.length - 3);
     return Column(
       key: const Key('command-clock'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${h.toString().padLeft(2, '0')}:$m',
+        Text.rich(
+          TextSpan(
+            text: digits,
+            children: [
+              if (suffix.isNotEmpty)
+                TextSpan(
+                  text: ' $suffix',
+                  style: const TextStyle(fontSize: 18, letterSpacing: 1, fontWeight: FontWeight.w400),
+                ),
+            ],
+          ),
+          key: const Key('clock-time'),
           style: TextStyle(
             fontSize: 40,
             fontWeight: FontWeight.w300,
@@ -442,15 +461,6 @@ String ago(DateTime t, [DateTime? now]) {
   if (d.inMinutes < 60) return '${d.inMinutes} min ago';
   if (d.inHours < 24) return '${d.inHours} h ago';
   return '${d.inDays} d ago';
-}
-
-String _when(DateTime t) {
-  final now = DateTime.now();
-  final hm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  if (t.year == now.year && t.month == now.month && t.day == now.day) return 'Today $hm';
-  final tomorrow = now.add(const Duration(days: 1));
-  if (t.year == tomorrow.year && t.month == tomorrow.month && t.day == tomorrow.day) return 'Tomorrow $hm';
-  return '${t.day}/${t.month} $hm';
 }
 
 class _Meter extends StatelessWidget {
@@ -640,7 +650,10 @@ class _RemindersPanel extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.alarm, size: 18),
               title: Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis),
-              trailing: Text(_when(r.dueAt), style: const TextStyle(fontSize: 12)),
+              trailing: Text(
+                dayTimeText(r.dueAt, h24: ref.watch(use24HourProvider)),
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
         ],
       );

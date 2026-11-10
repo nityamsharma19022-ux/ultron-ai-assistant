@@ -3,7 +3,31 @@
 All notable changes to ULTRON. Dates are when the work was committed to
 `claude/fervent-lovelace-fqank5`.
 
-## [Unreleased] — 2026-11-10 (round 3: FreeLLMAPI)
+## [Unreleased] — 2026-11-10 (ULTRON 2.0, part 1)
+
+### Added
+- **12-hour time everywhere** (9:30 PM) by default: Home clock, reminders,
+  activity, permissions, quiet hours, daily briefing, time picker,
+  reminder confirmations, alarm steps and AI answers. Optional 24-hour in
+  Settings → Personality & speed, synced across devices.
+- **Personality**: humble, warm, polite and professional. ULTRON
+  addresses you as "Sir" (changeable or off) and replies like "Certainly,
+  Sir. Reminder set for today at 9:30 PM."
+- **Response modes**: Instant (fast model, short answers), Balanced, Deep
+  reasoning; per user or per message. FreeLLMAPI uses `auto:fast` /
+  `auto:smart`.
+- **Measured speed**: time to first word and total time for every reply,
+  shown under replies and as averages on System → AI usage.
+- The AI knows your local date and time.
+- Reports: ULTRON_UPGRADE_AUDIT, AI_BRAIN_REPORT, PERFORMANCE_REPORT,
+  VOICE_SYSTEM_REPORT.
+- Migration `0008`.
+
+### Fixed (found on the owner's PC)
+- "open files" now opens File Explorer (everyday app names understood).
+- Home → AI activity refreshes by itself.
+
+## 2026-11-10 (round 3: FreeLLMAPI)
 
 ### Added
 - **FreeLLMAPI** gateway as the first cloud AI source

@@ -39,6 +39,7 @@ class OpenAICompatibleProvider(ChatProvider):
         read_timeout: float,
         extra_headers: dict[str, str] | None = None,
         include_usage: bool = False,
+        variant_models: dict[str, str] | None = None,
     ) -> None:
         self.name = name
         self._http = http
@@ -50,6 +51,8 @@ class OpenAICompatibleProvider(ChatProvider):
         self._extra_headers = extra_headers or {}
         # Ask for token counts in the stream (only where the API supports it).
         self._include_usage = include_usage
+        # Model per response mode ("fast"/"smart"), e.g. FreeLLMAPI's auto:fast.
+        self._variant_models = variant_models or {}
 
     def is_configured(self) -> bool:
         return bool(
@@ -74,7 +77,7 @@ class OpenAICompatibleProvider(ChatProvider):
         messages += [{"role": m.role, "content": m.content} for m in request.messages]
         # Deliberately no "tools"/"functions": responses are text only.
         payload: dict[str, object] = {
-            "model": self.model,
+            "model": self.model_for(request),
             "messages": messages,
             "stream": True,
             "max_tokens": request.max_output_tokens,
@@ -82,6 +85,9 @@ class OpenAICompatibleProvider(ChatProvider):
         if self._include_usage:
             payload["stream_options"] = {"include_usage": True}
         return payload
+
+    def model_for(self, request: ChatRequest) -> str | None:
+        return self._variant_models.get(request.variant) or self.model
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
         if not self.is_configured():
@@ -94,7 +100,7 @@ class OpenAICompatibleProvider(ChatProvider):
         }
         finish_reason: str | None = None
         usage: dict[str, int] = {}
-        model_used = self.model
+        model_used = self.model_for(request)
         try:
             async with self._http.stream(
                 "POST",

@@ -10,6 +10,7 @@ import '../../core/providers.dart';
 import '../../core/auth/session.dart';
 import '../../core/status/system_status.dart';
 import '../../core/theme/ultron_colors.dart';
+import '../../core/time_format.dart';
 import '../../widgets/connection_indicator.dart';
 import '../../widgets/glass_panel.dart';
 import '../agent/phone_agent.dart';
@@ -107,7 +108,9 @@ class _Header extends ConsumerWidget {
               Text('SYSTEM STATUS', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 4),
               Text(
-                checked == null ? 'Checking…' : 'Last checked ${_time(checked)} · refreshes every 20 s',
+                checked == null
+                    ? 'Checking…'
+                    : 'Last checked ${_time(checked, h24: ref.watch(use24HourProvider))} · refreshes every 20 s',
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
@@ -127,8 +130,12 @@ class _Header extends ConsumerWidget {
   }
 }
 
-String _time(DateTime t) =>
-    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')}';
+/// "9:24:05 PM" (seconds help show the status is live).
+String _time(DateTime t, {bool h24 = false}) {
+  final base = clockText(t.hour, t.minute, h24: h24);
+  final sec = t.second.toString().padLeft(2, '0');
+  return h24 ? '$base:$sec' : base.replaceFirst(' ', ':$sec ');
+}
 
 /// Card with a titled header.
 class _Card extends StatelessWidget {
@@ -466,7 +473,9 @@ class _DevicesCard extends ConsumerWidget {
                 }, color: UltronColors.textSecondary),
                 title: Text(d.id == currentId ? '${d.name} (this device)' : d.name),
                 subtitle: Text(
-                  d.lastSeenAt == null ? d.platform : '${d.platform} · last active ${_date(d.lastSeenAt!)}',
+                  d.lastSeenAt == null
+                      ? d.platform
+                      : '${d.platform} · last active ${_date(d.lastSeenAt!, ref.watch(use24HourProvider))}',
                   style: const TextStyle(fontSize: 11.5, color: UltronColors.textMuted),
                 ),
                 trailing: d.id == currentId
@@ -483,8 +492,7 @@ class _DevicesCard extends ConsumerWidget {
     );
   }
 
-  static String _date(DateTime t) =>
-      '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')} ${_time(t).substring(0, 5)}';
+  static String _date(DateTime t, bool h24) => dayTimeText(t, h24: h24);
 
   Future<void> _confirmRevoke(BuildContext context, WidgetRef ref, DeviceInfo d) async {
     final ok = await showDialog<bool>(
@@ -734,6 +742,9 @@ class _UsageCard extends ConsumerWidget {
                         ?r.model,
                         if (r.inputTokens + r.outputTokens > 0) '${r.inputTokens + r.outputTokens} tokens',
                         if (r.fallbacks > 0) '${r.fallbacks} as fallback',
+                        if (r.avgFirstTokenMs != null && r.avgDurationMs != null)
+                          'first word ${(r.avgFirstTokenMs! / 1000).toStringAsFixed(1)} s, '
+                              'done ${(r.avgDurationMs! / 1000).toStringAsFixed(1)} s (avg)',
                       ].join(' · '),
                     ),
                 ],

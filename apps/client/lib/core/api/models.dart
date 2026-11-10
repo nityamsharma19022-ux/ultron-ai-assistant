@@ -109,9 +109,13 @@ class ChatMessage {
     this.errorCode,
     this.errorMessage,
     this.timestamp,
+    this.firstTokenMs,
+    this.durationMs,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
+    firstTokenMs: j['first_token_ms'] as int?,
+    durationMs: j['duration_ms'] as int?,
     id: j['id'] as String,
     role: j['role'] as String,
     content: j['content'] as String? ?? '',
@@ -124,6 +128,9 @@ class ChatMessage {
     timestamp: _date(j['created_at']),
   );
 
+  /// Measured by ULTRON Core: time to the first word and to the end.
+  final int? firstTokenMs;
+  final int? durationMs;
   final String id;
   final String role;
   final String content;
@@ -161,6 +168,8 @@ class ChatMessage {
     errorCode: errorCode ?? this.errorCode,
     errorMessage: errorMessage ?? this.errorMessage,
     timestamp: timestamp,
+    firstTokenMs: firstTokenMs,
+    durationMs: durationMs,
   );
 }
 
@@ -231,6 +240,9 @@ class AiPreferences {
     required this.availableCloudProviders,
     this.memoryEnabled = true,
     this.memorySavingPaused = false,
+    this.timeFormat = '12h',
+    this.addressAs = 'Sir',
+    this.responseMode = 'balanced',
   });
   factory AiPreferences.fromJson(Map<String, dynamic> j) => AiPreferences(
     mode: j['mode'] as String? ?? 'auto',
@@ -238,6 +250,9 @@ class AiPreferences {
     privateByDefault: j['private_by_default'] as bool? ?? false,
     memoryEnabled: j['memory_enabled'] as bool? ?? true,
     memorySavingPaused: j['memory_saving_paused'] as bool? ?? false,
+    timeFormat: j['time_format'] as String? ?? '12h',
+    addressAs: j['address_as'] as String? ?? 'Sir',
+    responseMode: j['response_mode'] as String? ?? 'balanced',
     availableCloudProviders: [for (final n in (j['available_cloud_providers'] as List? ?? const [])) n as String],
   );
   final String mode;
@@ -251,12 +266,24 @@ class AiPreferences {
   /// ULTRON doesn't save new memories by itself while paused.
   final bool memorySavingPaused;
 
+  /// "12h" (default) or "24h".
+  final String timeFormat;
+
+  /// How ULTRON addresses you ("" = no title).
+  final String addressAs;
+
+  /// "instant", "balanced" or "deep".
+  final String responseMode;
+
   Map<String, dynamic> toJson() => {
     'mode': mode,
     'cloud_order': cloudOrder,
     'private_by_default': privateByDefault,
     'memory_enabled': memoryEnabled,
     'memory_saving_paused': memorySavingPaused,
+    'time_format': timeFormat,
+    'address_as': addressAs,
+    'response_mode': responseMode,
   };
 
   AiPreferences copyWith({
@@ -265,12 +292,18 @@ class AiPreferences {
     bool? privateByDefault,
     bool? memoryEnabled,
     bool? memorySavingPaused,
+    String? timeFormat,
+    String? addressAs,
+    String? responseMode,
   }) => AiPreferences(
     mode: mode ?? this.mode,
     cloudOrder: cloudOrder ?? this.cloudOrder,
     privateByDefault: privateByDefault ?? this.privateByDefault,
     memoryEnabled: memoryEnabled ?? this.memoryEnabled,
     memorySavingPaused: memorySavingPaused ?? this.memorySavingPaused,
+    timeFormat: timeFormat ?? this.timeFormat,
+    addressAs: addressAs ?? this.addressAs,
+    responseMode: responseMode ?? this.responseMode,
     availableCloudProviders: availableCloudProviders,
   );
 }

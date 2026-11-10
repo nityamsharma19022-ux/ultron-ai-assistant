@@ -144,10 +144,23 @@ async def _reminder(args: tools.ReminderArgs, ctx: CoreContext) -> dict[str, Any
     reminder = Reminder(user_id=ctx.task.user_id, text=args.text, due_at=due, task_id=ctx.task.id)
     ctx.session.add(reminder)
     await ctx.session.flush()
+    # Shown and spoken in the user's local time (12-hour unless they chose 24).
+    from ultron_core import timefmt
+    from ultron_core.db.models import UserAIPreferences
+    from ultron_core.notifications import get_settings as notification_settings
+
+    if args.due_at is not None and args.due_at.tzinfo is not None:
+        zone = args.due_at.tzinfo
+    else:
+        offset = (await notification_settings(ctx.session, ctx.task.user_id)).utc_offset_minutes
+        zone = timefmt.offset_zone(offset)
+    prefs = await ctx.session.get(UserAIPreferences, ctx.task.user_id)
+    h24 = prefs is not None and prefs.time_format == "24h"
+    local_due = due.astimezone(zone)
     return {
         "reminder_id": str(reminder.id),
         "due_at": due.isoformat(),
-        "summary": f"Reminder set for {due.isoformat(timespec='minutes')}",
+        "summary": f"Reminder set for {timefmt.when(local_due, now.astimezone(zone), h24=h24)}",
         "verified": True,
     }
 

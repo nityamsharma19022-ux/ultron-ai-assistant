@@ -486,7 +486,13 @@ class UltronApi {
   }) async* {
     final response = await _sendStreaming(
       _uri('/api/v1/conversations/$conversationId/messages'),
-      jsonEncode({'content': content, 'stream': true, if (documentIds.isNotEmpty) 'document_ids': documentIds}),
+      jsonEncode({
+        'content': content,
+        'stream': true,
+        if (documentIds.isNotEmpty) 'document_ids': documentIds,
+        // So ULTRON knows your local time (it answers with 12-hour times).
+        'utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+      }),
       abort,
     );
     final bytes = withIdleTimeout<List<int>>(

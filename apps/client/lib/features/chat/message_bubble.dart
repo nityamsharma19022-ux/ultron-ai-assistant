@@ -113,6 +113,16 @@ class MessageBubble extends StatelessWidget {
             )
           else
             const Spacer(),
+          if (message.firstTokenMs != null && message.durationMs != null)
+            Tooltip(
+              message:
+                  'First word after ${seconds(message.firstTokenMs!)}, finished after ${seconds(message.durationMs!)}',
+              child: Text(
+                '${seconds(message.firstTokenMs!)} → ${seconds(message.durationMs!)}',
+                key: Key('timing-${message.id}'),
+                style: const TextStyle(fontSize: 11, color: UltronColors.textMuted),
+              ),
+            ),
           if (message.content.isNotEmpty && message.status != MessageStatus.streaming)
             IconButton(
               tooltip: 'Copy',
@@ -213,3 +223,6 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
     return x < 0.5 ? x * 2 : (1 - x) * 2;
   }
 }
+
+/// 850 ms -> "0.9 s", 12500 ms -> "12.5 s".
+String seconds(int ms) => '${(ms / 1000).toStringAsFixed(1)} s';

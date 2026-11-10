@@ -103,6 +103,9 @@ async def get_preferences(session: AsyncSession, user: User) -> UserAIPreference
             private_by_default=False,
             memory_enabled=True,
             memory_saving_paused=False,
+            time_format="12h",
+            address_as="Sir",
+            response_mode="balanced",
             active_mode="normal",
         )
     return prefs

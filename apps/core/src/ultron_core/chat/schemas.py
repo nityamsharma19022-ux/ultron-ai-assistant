@@ -88,6 +88,10 @@ class MessageCreate(_Strict):
     stream: bool = False
     # Documents to answer from (their relevant parts are given to the AI).
     document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=5)
+    # This message only: "instant", "balanced" or "deep" (default: preference).
+    response_mode: Literal["instant", "balanced", "deep"] | None = None
+    # The device's UTC offset, so ULTRON knows the user's local time.
+    utc_offset_minutes: int | None = Field(default=None, ge=-14 * 60, le=14 * 60)
 
     @field_validator("content")
     @classmethod
@@ -110,6 +114,8 @@ class MessageOut(BaseModel):
     model: str | None
     fallback_used: bool
     error_code: str | None
+    first_token_ms: int | None = None
+    duration_ms: int | None = None
     created_at: datetime
 
 
@@ -131,6 +137,15 @@ class PreferencesIn(_Strict):
     # None keeps the current value (older apps don't send it).
     memory_enabled: bool | None = None
     memory_saving_paused: bool | None = None
+    time_format: Literal["12h", "24h"] | None = None
+    # How ULTRON addresses you ("" = no title).
+    address_as: str | None = Field(default=None, max_length=40)
+    response_mode: Literal["instant", "balanced", "deep"] | None = None
+
+    @field_validator("address_as")
+    @classmethod
+    def _address(cls, v: str | None) -> str | None:
+        return None if v is None else " ".join(_clean_text(v).split())
 
 
 class PreferencesOut(BaseModel):
@@ -139,6 +154,9 @@ class PreferencesOut(BaseModel):
     private_by_default: bool
     memory_enabled: bool
     memory_saving_paused: bool = False
+    time_format: str = "12h"
+    address_as: str = "Sir"
+    response_mode: str = "balanced"
     available_cloud_providers: list[str]
 
 

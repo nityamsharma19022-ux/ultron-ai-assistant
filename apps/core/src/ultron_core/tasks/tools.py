@@ -23,6 +23,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from ultron_core.timefmt import clock as _clock
+
 Risk = Literal["A", "B", "C"]
 Target = Literal["core", "windows", "android"]
 
@@ -486,7 +488,7 @@ _SPECS: list[ToolSpec] = [
         "A",
         AlarmArgs,
         "Set an alarm in the phone's clock app.",
-        lambda a: f"Set an alarm for {a.hour:02d}:{a.minute:02d}",
+        lambda a: f"Set an alarm for {_clock(a.hour, a.minute)}",
     ),
     ToolSpec(
         "phone.timer.set",

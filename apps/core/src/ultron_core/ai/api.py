@@ -81,6 +81,9 @@ def _prefs_out(prefs, ai_router: AIRouter) -> PreferencesOut:  # type: ignore[no
         private_by_default=prefs.private_by_default,
         memory_enabled=prefs.memory_enabled,
         memory_saving_paused=prefs.memory_saving_paused,
+        time_format=prefs.time_format,
+        address_as=prefs.address_as,
+        response_mode=prefs.response_mode,
         available_cloud_providers=[p.name for p in ai_router.cloud_providers],
     )
 
@@ -114,6 +117,10 @@ async def put_preferences(
         prefs.memory_enabled = body.memory_enabled
     if body.memory_saving_paused is not None:
         prefs.memory_saving_paused = body.memory_saving_paused
+    for field in ("time_format", "address_as", "response_mode"):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(prefs, field, value)
     session.add(prefs)
     await session.commit()
     return _prefs_out(prefs, ai_router)
@@ -224,6 +231,9 @@ class UsageRow(BaseModel):
     fallbacks: int
     input_tokens: int
     output_tokens: int
+    # Measured on the server (successful replies only), in milliseconds.
+    avg_first_token_ms: int | None = None
+    avg_duration_ms: int | None = None
 
 
 class UsageOut(BaseModel):
@@ -254,6 +264,8 @@ async def usage(
             func.sum(case((Message.fallback_used.is_(True), 1), else_=0)),
             func.coalesce(func.sum(Message.input_tokens), 0),
             func.coalesce(func.sum(Message.output_tokens), 0),
+            func.avg(case((Message.status == "complete", Message.first_token_ms))),
+            func.avg(case((Message.status == "complete", Message.duration_ms))),
         )
         .join(Conversation, Conversation.id == Message.conversation_id)
         .where(
@@ -275,7 +287,9 @@ async def usage(
             fallbacks=int(fb or 0),
             input_tokens=int(i),
             output_tokens=int(o),
+            avg_first_token_ms=round(ft) if ft is not None else None,
+            avg_duration_ms=round(d) if d is not None else None,
         )
-        for p, k, m, n, f, fb, i, o in (await session.execute(stmt)).all()
+        for p, k, m, n, f, fb, i, o, ft, d in (await session.execute(stmt)).all()
     ]
     return UsageOut(days=days, total_replies=sum(r.replies for r in rows), rows=rows)

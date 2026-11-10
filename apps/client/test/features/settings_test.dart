@@ -135,7 +135,8 @@ void main() {
     await pumpUltron(tester, FakeBackend(), signedIn: true, size: _tall);
     await openSection(tester, 'settings');
 
-    await tester.ensureVisible(find.byKey(const Key('sign-out')));
+    // Settings is a long page: scroll until the account section is built.
+    await tester.dragUntilVisible(find.byKey(const Key('sign-out')), find.byType(ListView).last, const Offset(0, -400));
     await tester.pump();
     expect(find.text(ownerEmail), findsOneWidget);
     expect(find.text('Windows PC (windows)'), findsOneWidget);

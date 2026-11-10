@@ -10,6 +10,7 @@ import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../core/api/models.dart';
 import '../../core/auth/session.dart';
+import '../../core/time_format.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/glass_panel.dart';
@@ -34,6 +35,8 @@ class SettingsPage extends ConsumerWidget {
           Text('SETTINGS', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 16),
           const _AiSection(),
+          const SizedBox(height: 16),
+          const _PersonaSection(),
           const SizedBox(height: 16),
           const _ModesSection(),
           const SizedBox(height: 16),
@@ -300,6 +303,106 @@ class _AppearanceSection extends ConsumerWidget {
   }
 }
 
+// ------------------------------------------------- personality and speed
+
+class _PersonaSection extends ConsumerStatefulWidget {
+  const _PersonaSection();
+
+  @override
+  ConsumerState<_PersonaSection> createState() => _PersonaSectionState();
+}
+
+class _PersonaSectionState extends ConsumerState<_PersonaSection> {
+  final _address = TextEditingController();
+  bool _loaded = false;
+
+  @override
+  void dispose() {
+    _address.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(AiPreferences updated) async {
+    try {
+      await ref.read(aiPreferencesProvider.notifier).save(updated);
+    } on ApiException catch (e) {
+      ref.read(noticesProvider.notifier).show(e.message);
+    }
+  }
+
+  static const speeds = {
+    'instant': ('Instant', 'Fast model, short answers'),
+    'balanced': ('Balanced', 'Good answers at good speed'),
+    'deep': ('Deep reasoning', 'Strongest model, careful answers (slower)'),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final prefs = ref.watch(aiPreferencesProvider).value;
+    if (prefs == null) return const SizedBox();
+    if (!_loaded) {
+      _address.text = prefs.addressAs;
+      _loaded = true;
+    }
+    return _Section(
+      key: const Key('persona-settings'),
+      title: 'PERSONALITY & SPEED',
+      subtitle: 'Synced to all your devices.',
+      children: [
+        const Text('Response speed', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          key: const Key('response-mode'),
+          segments: [for (final e in speeds.entries) ButtonSegment(value: e.key, label: Text(e.value.$1))],
+          selected: {prefs.responseMode},
+          onSelectionChanged: (v) => _save(prefs.copyWith(responseMode: v.first)),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          speeds[prefs.responseMode]?.$2 ?? '',
+          style: const TextStyle(fontSize: 12.5, color: UltronColors.textSecondary),
+        ),
+        const SizedBox(height: 20),
+        const Text('Clock', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          key: const Key('time-format'),
+          segments: [
+            ButtonSegment(value: '12h', label: Text('12-hour (${clockText(21, 30)})')),
+            ButtonSegment(value: '24h', label: Text('24-hour (${clockText(21, 30, h24: true)})')),
+          ],
+          selected: {prefs.timeFormat},
+          onSelectionChanged: (v) => _save(prefs.copyWith(timeFormat: v.first)),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          key: const Key('address-as'),
+          controller: _address,
+          maxLength: 40,
+          decoration: const InputDecoration(
+            labelText: 'ULTRON addresses you as',
+            hintText: 'Sir',
+            helperText: 'Leave empty for no title',
+          ),
+          onSubmitted: (v) => _save(prefs.copyWith(addressAs: v.trim())),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            key: const Key('save-address'),
+            onPressed: () => _save(prefs.copyWith(addressAs: _address.text.trim())),
+            child: const Text('Save'),
+          ),
+        ),
+        const Text(
+          'ULTRON is polite, warm and patient, admits when it is unsure, and never pretends to have feelings.',
+          style: TextStyle(fontSize: 12, color: UltronColors.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
 // ---------------------------------------------------------------- modes
 
 class _ModesSection extends ConsumerWidget {
@@ -477,11 +580,16 @@ class _NotificationSection extends ConsumerWidget {
     dailyBriefing: briefing != null ? briefing() : s.dailyBriefing,
   );
 
-  Future<String?> _pickTime(BuildContext context, String? current) async {
+  Future<String?> _pickTime(BuildContext context, String? current, bool h24) async {
     final parts = (current ?? '22:00').split(':');
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+      // The picker follows ULTRON's clock setting (12-hour unless changed).
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: h24),
+        child: child!,
+      ),
     );
     if (t == null) return null;
     return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -490,6 +598,8 @@ class _NotificationSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(notificationSettingsProvider);
+    final h24 = ref.watch(use24HourProvider);
+    String t(String? v) => hhmmText(v, h24: h24);
     return _Section(
       key: const Key('notification-settings'),
       title: 'NOTIFICATIONS',
@@ -513,7 +623,7 @@ class _NotificationSection extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 value: s.quietStart != null,
                 title: const Text('Quiet hours'),
-                subtitle: Text(s.quietStart == null ? 'Not set' : '${s.quietStart} – ${s.quietEnd}'),
+                subtitle: Text(s.quietStart == null ? 'Not set' : '${t(s.quietStart)} – ${t(s.quietEnd)}'),
                 onChanged: (on) =>
                     _save(ref, _with(s, quietStart: () => on ? '22:00' : null, quietEnd: () => on ? '07:00' : null)),
               ),
@@ -524,18 +634,18 @@ class _NotificationSection extends ConsumerWidget {
                     OutlinedButton(
                       key: const Key('quiet-start'),
                       onPressed: () async {
-                        final t = await _pickTime(context, s.quietStart);
+                        final t = await _pickTime(context, s.quietStart, h24);
                         if (t != null) await _save(ref, _with(s, quietStart: () => t));
                       },
-                      child: Text('From ${s.quietStart}'),
+                      child: Text('From ${t(s.quietStart)}'),
                     ),
                     OutlinedButton(
                       key: const Key('quiet-end'),
                       onPressed: () async {
-                        final t = await _pickTime(context, s.quietEnd);
+                        final t = await _pickTime(context, s.quietEnd, h24);
                         if (t != null) await _save(ref, _with(s, quietEnd: () => t));
                       },
-                      child: Text('Until ${s.quietEnd}'),
+                      child: Text('Until ${t(s.quietEnd)}'),
                     ),
                   ],
                 ),
@@ -547,7 +657,7 @@ class _NotificationSection extends ConsumerWidget {
                 subtitle: Text(
                   s.dailyBriefing == null
                       ? 'Not scheduled'
-                      : 'At ${s.dailyBriefing}: your reminders, tasks and devices for the day',
+                      : 'At ${t(s.dailyBriefing)}: your reminders, tasks and devices for the day',
                 ),
                 onChanged: (on) => _save(ref, _with(s, briefing: () => on ? '08:00' : null)),
               ),

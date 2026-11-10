@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -104,9 +105,24 @@ class GenerationManager:
         settings: Settings,
         sessionmaker: async_sessionmaker[AsyncSession],
         system: str = SYSTEM_PROMPT,
+        variant: str = "default",
+        max_output_tokens: int | None = None,
+        received_at: float | None = None,
     ) -> None:
         active.task = asyncio.create_task(
-            self._run(active, router, prefs, private, history, settings, sessionmaker, system),
+            self._run(
+                active,
+                router,
+                prefs,
+                private,
+                history,
+                settings,
+                sessionmaker,
+                system,
+                variant,
+                max_output_tokens,
+                received_at,
+            ),
             name=f"ultron-generation-{active.conversation_id}",
         )
 
@@ -120,7 +136,14 @@ class GenerationManager:
         settings: Settings,
         sessionmaker: async_sessionmaker[AsyncSession],
         system: str = SYSTEM_PROMPT,
+        variant: str = "default",
+        max_output_tokens: int | None = None,
+        received_at: float | None = None,
     ) -> None:
+        # Timed from when Core received the message (includes memory lookup).
+        started = received_at or time.perf_counter()
+        timing: dict[str, int | None] = {"first_token_ms": None, "duration_ms": None}
+
         def build_request(provider: ChatProvider) -> ChatRequest:
             return ChatRequest(
                 messages=select_context(
@@ -129,7 +152,8 @@ class GenerationManager:
                     max_messages=settings.ai_context_max_messages,
                 ),
                 system=system,
-                max_output_tokens=settings.ai_max_output_tokens,
+                max_output_tokens=max_output_tokens or settings.ai_max_output_tokens,
+                variant=variant,
             )
 
         parts: list[str] = []
@@ -160,6 +184,8 @@ class GenerationManager:
                             )
                         )
                     elif isinstance(event, TextDelta):
+                        if timing["first_token_ms"] is None:
+                            timing["first_token_ms"] = round((time.perf_counter() - started) * 1000)
                         parts.append(event.text)
                         await active.queue.put(("delta", {"text": event.text}))
                     elif isinstance(event, Completed):
@@ -213,9 +239,10 @@ class GenerationManager:
                 "end": None,
             }
 
+        timing["duration_ms"] = round((time.perf_counter() - started) * 1000)
         # Record the result even if we are being cancelled a second time.
         finalize = asyncio.ensure_future(
-            self._finalize(active, sessionmaker, "".join(parts), route, outcome)
+            self._finalize(active, sessionmaker, "".join(parts), route, outcome, timing)
         )
         try:
             await asyncio.shield(finalize)
@@ -232,6 +259,7 @@ class GenerationManager:
         text: str,
         route: RouteInfo | None,
         outcome: dict[str, Any],
+        timing: dict[str, int | None] | None = None,
     ) -> None:
         error = outcome["error"]
         end = outcome["end"]
@@ -250,6 +278,9 @@ class GenerationManager:
             if end is not None:
                 message.input_tokens = end.input_tokens
                 message.output_tokens = end.output_tokens
+            if timing:
+                message.first_token_ms = timing["first_token_ms"]
+                message.duration_ms = timing["duration_ms"]
             await session.commit()
             payload: dict[str, Any] = {
                 "assistant_message": MessageOut.model_validate(message).model_dump(mode="json"),
@@ -262,6 +293,8 @@ class GenerationManager:
             kind=route.kind.value if route else None,
             error_code=error["code"] if error else None,
             chars=len(text),
+            first_token_ms=(timing or {}).get("first_token_ms"),
+            duration_ms=(timing or {}).get("duration_ms"),
         )
         if outcome["status"] == "complete":
             await active.queue.put(("message.completed", payload))

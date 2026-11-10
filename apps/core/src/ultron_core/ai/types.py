@@ -28,6 +28,8 @@ class ChatRequest:
     messages: tuple[ChatMessage, ...]
     system: str
     max_output_tokens: int = 2048
+    # "fast", "default" or "smart": routers like FreeLLMAPI pick a model tier.
+    variant: str = "default"
 
 
 @dataclass(frozen=True, slots=True)

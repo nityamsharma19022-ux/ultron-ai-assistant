@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ultron_core import activity
+from ultron_core import activity, persona
 from ultron_core.ai import profiles
 from ultron_core.chat.service import get_preferences, routing_preferences
 from ultron_core.db.models import PermissionGrant, Reminder, Schedule, Task
@@ -70,7 +70,7 @@ async def _out(session: AsyncSession, task_id: uuid.UUID) -> TaskOut:
 # --- the assistant command ------------------------------------------------------
 
 
-def _task_message(task: TaskOut) -> str:
+def _task_message(task: TaskOut, address: str | None = persona.DEFAULT_ADDRESS) -> str:
     if task.status == "completed":
         notes = [
             str(s.result["summary"]).rstrip(".")
@@ -78,17 +78,17 @@ def _task_message(task: TaskOut) -> str:
             if s.result and isinstance(s.result.get("summary"), str)
         ]
         if len(task.steps) == 1 and notes:
-            return f"Done. {notes[0]}."
-        return f"Done: {task.title.rstrip('.')} ({len(task.steps)} steps)."
+            return persona.done(notes[0], address)
+        return persona.done_steps(task.title, len(task.steps), address)
     if task.status == "awaiting_approval":
         waiting = [s.title for s in task.steps if s.status == "awaiting_approval"]
-        return "I need your approval to: " + "; ".join(waiting or [task.title])
+        return persona.needs_approval("; ".join(waiting or [task.title]), address)
     if task.status == "failed":
-        return f"I couldn't finish that. {task.error or ''}".strip()
+        return persona.failed(task.error, address)
     if task.status == "cancelled":
-        return "That task was cancelled."
+        return persona.cancelled(address)
     waiting = next((s.progress for s in task.steps if s.status == "ready" and s.progress), None)
-    return f"Working on it: {task.title}" + (f". {waiting}." if waiting else "")
+    return persona.working(task.title, waiting, address)
 
 
 async def _wait(session: AsyncSession, task_id: uuid.UUID, seconds: float) -> None:
@@ -112,20 +112,23 @@ async def assistant_command(
     if body.private and not settings.private_conversations_allowed:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=PRIVATE_NOT_ALLOWED)
     ctx = await service.plan_context(session, principal, body.timezone, body.utc_offset_minutes)
+    stored = await get_preferences(session, principal.user)
+    address = stored.address_as
     plan = planner.rule_plan(body.text, ctx)
     if plan is None:
-        prefs = routing_preferences(await get_preferences(session, principal.user))
+        prefs = routing_preferences(stored)
         prefs = profiles.preferences_for("planning", prefs, settings.ai_task_profiles)
         try:
             plan = await planner.ai_plan(
                 body.text, ctx, request.app.state.ai_router, prefs, private=body.private
             )
         except planner.PlanError as exc:
-            return CommandOut(type="answer", message=f"I couldn't plan that: {exc.message}")
+            return CommandOut(
+                type="answer",
+                message=persona.failed(f"I couldn't plan that: {exc.message}", address),
+            )
     if not plan.steps:
-        return CommandOut(
-            type="answer", message=plan.answer or "I'm not sure how to help with that."
-        )
+        return CommandOut(type="answer", message=plan.answer or persona.answer_fallback(address))
     task = await service.create_task(
         session, principal, plan, request=body.text, private=body.private
     )
@@ -134,7 +137,7 @@ async def assistant_command(
     if body.wait:
         await _wait(session, task.id, settings.assistant_wait_seconds)
     out = await _out(session, task.id)
-    return CommandOut(type="task", message=_task_message(out), task=out)
+    return CommandOut(type="task", message=_task_message(out, address), task=out)
 
 
 # --- tasks ---------------------------------------------------------------------

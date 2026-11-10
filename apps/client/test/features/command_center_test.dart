@@ -242,7 +242,7 @@ void main() {
     await settle(tester);
     expect(backend.notificationSettings['quiet_start'], '22:00');
     expect(backend.notificationSettings['quiet_end'], '07:00');
-    expect(find.text('22:00 – 07:00'), findsOneWidget);
+    expect(find.text('10:00 PM – 7:00 AM'), findsOneWidget); // 12-hour by default
 
     await tester.tap(find.byKey(const Key('preset-nebula')));
     await settle(tester);

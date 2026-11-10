@@ -41,6 +41,12 @@ def build_providers(settings: Settings, http: httpx.AsyncClient) -> list[ChatPro
             api_key=settings.freellmapi_api_key,
             model=settings.freellmapi_model,
             include_usage=True,
+            # Only when the router chooses ("auto"); an exact model stays fixed.
+            variant_models=(
+                {"fast": settings.freellmapi_fast_model, "smart": settings.freellmapi_smart_model}
+                if (settings.freellmapi_model or "").startswith("auto")
+                else None
+            ),
             **common,
         ),
         OpenAICompatibleProvider(

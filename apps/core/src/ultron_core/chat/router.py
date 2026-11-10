@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -12,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ultron_core import ratelimit
+from ultron_core import persona, ratelimit, timefmt
 from ultron_core.ai import profiles
 from ultron_core.ai.context import SYSTEM_PROMPT
 from ultron_core.ai.router import RoutingPreferences
@@ -40,6 +41,13 @@ PRIVATE_NOT_ALLOWED = (
     "Private conversations are only available on a local ULTRON backend using a "
     "local database, so that their data stays on your own machine."
 )
+
+
+SPEED_PROMPTS = {
+    "instant": "\nAnswer briefly and directly.",
+    "balanced": "",
+    "deep": "\nThink the problem through carefully and give a thorough, well-reasoned answer.",
+}
 
 
 def _not_found() -> HTTPException:
@@ -187,6 +195,7 @@ async def send_message(
     settings: SettingsDep,
     redis: RedisDep,
 ) -> Any:
+    received_at = time.perf_counter()
     if len(body.content) > settings.chat_max_message_chars:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -237,8 +246,24 @@ async def send_message(
         if mode.ai_mode:
             prefs = RoutingPreferences(mode=mode.ai_mode, cloud_order=prefs.cloud_order)  # type: ignore[arg-type]
         kind = "coding" if mode.key == "developer" else profiles.classify(body.content)
+        speed = body.response_mode or stored_prefs.response_mode or "balanced"
+        if speed == "deep" and kind == "chat":
+            kind = "reasoning"
         prefs = profiles.preferences_for(kind, prefs, settings.ai_task_profiles)
         memory_on = stored_prefs.memory_enabled and mode.memory
+        offset = body.utc_offset_minutes
+        if offset is None:
+            from ultron_core.notifications import get_settings as notification_settings
+
+            offset = (await notification_settings(session, principal.user.id)).utc_offset_minutes
+        now_local = datetime.now(UTC).astimezone(timefmt.offset_zone(offset))
+        h24 = stored_prefs.time_format == "24h"
+        style = persona.prompt(stored_prefs.address_as, now_local, h24=h24) + SPEED_PROMPTS[speed]
+        max_tokens = {
+            "instant": min(settings.ai_max_output_tokens, 1024),
+            "balanced": settings.ai_max_output_tokens,
+            "deep": min(settings.ai_max_output_tokens * 2, 8192),
+        }[speed]
         user_message, assistant_message = await service.start_exchange(
             session, conversation, body.content
         )
@@ -249,7 +274,11 @@ async def send_message(
                 principal.user,
                 body.content,
                 private=conversation.is_private,
-                limit=settings.memory_context_limit,
+                limit=(
+                    max(1, settings.memory_context_limit // 2)
+                    if speed == "instant"
+                    else settings.memory_context_limit
+                ),
                 project=conversation.project,
             )
             if memory_on
@@ -278,7 +307,11 @@ async def send_message(
         history=history,
         settings=settings,
         sessionmaker=request.app.state.sessionmaker,
+        variant={"instant": "fast", "balanced": "default", "deep": "smart"}[speed],
+        max_output_tokens=max_tokens,
+        received_at=received_at,
         system=SYSTEM_PROMPT
+        + style
         + mode.prompt()
         + memory_service.context_block(recalled)
         + document_service.context_block(excerpts),
@@ -289,6 +322,7 @@ async def send_message(
         "assistant_message_id": str(assistant_message.id),
         "private": conversation.is_private,
         "memories_used": len(recalled),
+        "response_mode": speed,
         "document_parts_used": len(excerpts),
     }
     if body.stream:

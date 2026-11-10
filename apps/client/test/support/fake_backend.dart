@@ -697,6 +697,10 @@ class FakeBackend {
         provider: kind == null ? null : 'ollama',
         model: kind == null ? null : 'qwen3.5:4b',
       );
+      if (!cancelled) {
+        final_['first_token_ms'] = 900;
+        final_['duration_ms'] = 2400;
+      }
       messages[conversationId]!.add(final_);
       controller.add(
         utf8.encode(

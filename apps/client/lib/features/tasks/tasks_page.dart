@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time_format.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/task_models.dart';
 import '../../core/providers.dart';
@@ -482,7 +483,7 @@ class PermissionsTab extends ConsumerWidget {
                             subtitle: p.alwaysAsks
                                 ? const Text('Always asks', style: TextStyle(color: UltronColors.warning))
                                 : p.expiresAt != null
-                                ? Text('Until ${p.expiresAt!.toString().substring(0, 16)}')
+                                ? Text('Until ${dayTimeText(p.expiresAt!, h24: ref.watch(use24HourProvider))}')
                                 : null,
                           ),
                       ],
@@ -545,7 +546,7 @@ class ActivityTab extends ConsumerWidget {
                     leading: Icon(icon(a.kind), color: failed ? UltronColors.danger : UltronColors.textSecondary),
                     title: Text(a.summary),
                     subtitle: Text(
-                      '${a.createdAt.toString().substring(0, 16)} · ${a.kind}',
+                      '${dayTimeText(a.createdAt, h24: ref.watch(use24HourProvider))} · ${a.kind}',
                       style: const TextStyle(fontSize: 11.5, color: UltronColors.textMuted),
                     ),
                   );

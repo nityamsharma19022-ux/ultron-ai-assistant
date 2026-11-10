@@ -203,8 +203,12 @@ class UsageRow {
     this.fallbacks = 0,
     this.inputTokens = 0,
     this.outputTokens = 0,
+    this.avgFirstTokenMs,
+    this.avgDurationMs,
   });
   factory UsageRow.fromJson(Map<String, dynamic> j) => UsageRow(
+    avgFirstTokenMs: j['avg_first_token_ms'] as int?,
+    avgDurationMs: j['avg_duration_ms'] as int?,
     provider: j['provider'] as String,
     kind: j['kind'] as String?,
     model: j['model'] as String?,
@@ -222,6 +226,10 @@ class UsageRow {
   final int fallbacks;
   final int inputTokens;
   final int outputTokens;
+
+  /// Measured by Core: average time to the first word / to the end.
+  final int? avgFirstTokenMs;
+  final int? avgDurationMs;
 }
 
 class UsageInfo {

@@ -148,6 +148,9 @@ class Message(IdMixin, TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(60))
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
+    # Measured on the server: time to the first word and to the end of the reply.
+    first_token_ms: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
     # Full-text search over past conversations.
     search: Mapped[str] = mapped_column(
         TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), deferred=True
@@ -176,6 +179,18 @@ class UserAIPreferences(Base):
     # still add memories by hand.
     memory_saving_paused: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
+    )
+    # "12h" (default, 9:30 PM) or "24h"; synced to every device.
+    time_format: Mapped[str] = mapped_column(
+        String(4), nullable=False, default="12h", server_default="12h"
+    )
+    # How ULTRON addresses the user ("Sir" by default; empty = no title).
+    address_as: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="Sir", server_default="Sir"
+    )
+    # "instant" (fast model, short), "balanced" or "deep" (reasoning).
+    response_mode: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="balanced", server_default="balanced"
     )
     # Operating mode (built-in key or a custom mode's key).
     active_mode: Mapped[str] = mapped_column(

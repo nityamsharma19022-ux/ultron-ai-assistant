@@ -2,6 +2,22 @@
 
 Newest first. Each entry: what was done, how it was checked, what's left.
 
+## 2026-11-10 — ULTRON 2.0, part 1: time, personality, speed
+
+Owner request: "ULTRON 2.0 ultimate master upgrade". Done this round
+(tested; details in [ULTRON_UPGRADE_AUDIT.md](ULTRON_UPGRADE_AUDIT.md)):
+- 12-hour time across app and Core (`timefmt.py`, `time_format.dart`);
+  tests cover midnight (12:05 AM), noon (12:00 PM), UTC → local.
+- Personality module (`persona.py`): system prompt and polite task
+  replies with a configurable form of address.
+- Instant / Balanced / Deep: model tier, answer length, memory amount.
+- Reply timing measured from message receipt; stored per reply
+  (migration 0008); usage averages.
+- Measurements in [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md): Core
+  adds ~16–20 ms before the first word.
+- Checks: backend, app and agent suites (results below in the commit);
+  stand-in gateway confirmed the per-mode models.
+
 ## 2026-11-10 — First run on the owner's Windows PC
 
 Done by the owner, step by step, with photos (not in the sandbox):

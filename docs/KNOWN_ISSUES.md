@@ -22,6 +22,9 @@ _Last updated: 2026-11-10._ Open bugs: **none known**. Limitations:
   daylight-saving change, save them again.
 
 ## Not built yet
+- Windows tray icon, background service, wake word and keyboard shortcut
+  (see [VOICE_SYSTEM_REPORT.md](VOICE_SYSTEM_REPORT.md)).
+- Weather and calendar widgets; Google/Microsoft/GitHub integrations.
 - Semantic (vector) memory search; full-text search only.
 - Offline cache and sync between devices.
 - Images, scanned PDFs and audio can't be read.

@@ -19,6 +19,10 @@ _Last updated: 2026-11-10._
 | Private conversations → local AI only | IMPLEMENTED | Tests; private chats refused on a cloud backend |
 | Routing by task type (coding, reasoning, writing, summarize, planning) | IMPLEMENTED | `ULTRON_AI_TASK_PROFILES`; `test_web_profiles.py` |
 | Operating modes (Normal, Work, Developer, Study, Focus, custom) | VERIFIED | API + app tests; switched in the browser against live Core |
+| Response modes Instant / Balanced / Deep (per user or per message) | VERIFIED (sandbox) | Tests; stand-in gateway received `auto:fast` / `auto` / `auto:smart` |
+| Measured time to first word and total, per reply and averages | VERIFIED (sandbox) | Under each reply; System → AI usage; [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) |
+| Personality (humble, warm, polite), form of address ("Sir" default, configurable) | IMPLEMENTED | Tests check the prompt and task replies |
+| AI knows your local date and time | IMPLEMENTED | Device time zone sent with each message |
 | AI output is text only, never executed | IMPLEMENTED | Test `test_ai_output_is_stored_as_text_and_never_executed` |
 
 ## Memory
@@ -76,6 +80,8 @@ _Last updated: 2026-11-10._
 ## Interface
 | Feature | Status | Evidence / notes |
 |---|---|---|
+| 12-hour time (9:30 PM) everywhere by default; optional 24-hour, synced | IMPLEMENTED | App and Core tests incl. midnight/noon; Home clock, reminders, activity, quiet hours, briefing, reminder replies, alarm steps |
+| Windows app on the owner's PC | VERIFIED (owner, 2026-11-10) | Sign-in, Home, live PC metrics |
 | Command Center home with widgets | VERIFIED | App tests + browser screenshots against live Core (desktop and phone) |
 | Floating, draggable panels (desktop) | VERIFIED | App test + browser |
 | Minimal assistant mode | IMPLEMENTED | Assistant screen |
