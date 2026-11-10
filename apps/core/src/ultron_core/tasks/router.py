@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ultron_core import activity
+from ultron_core.ai import profiles
 from ultron_core.chat.service import get_preferences, routing_preferences
 from ultron_core.db.models import PermissionGrant, Reminder, Schedule, Task
 from ultron_core.deps import PrincipalDep, SessionDep, SettingsDep
@@ -114,6 +115,7 @@ async def assistant_command(
     plan = planner.rule_plan(body.text, ctx)
     if plan is None:
         prefs = routing_preferences(await get_preferences(session, principal.user))
+        prefs = profiles.preferences_for("planning", prefs, settings.ai_task_profiles)
         try:
             plan = await planner.ai_plan(
                 body.text, ctx, request.app.state.ai_router, prefs, private=body.private
@@ -148,8 +150,13 @@ async def create_task(
 ) -> TaskOut:
     if body.private and not settings.private_conversations_allowed:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=PRIVATE_NOT_ALLOWED)
+    ctx = await service.plan_context(session, principal, None)
     try:
-        steps = planner.build_steps([s.model_dump() for s in body.steps])
+        steps = planner.build_steps(
+            [s.model_dump() for s in body.steps],
+            max_steps=ctx.max_steps,
+            allowed_areas=ctx.allowed_areas,
+        )
     except planner.PlanError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.message) from None
     plan = planner.Plan(title=body.title, steps=steps, source="manual")
@@ -421,8 +428,15 @@ async def set_permission(
 
 
 def _automation_out(state: Any) -> AutomationOut:
+    levels = {
+        a: int((state.levels or {}).get(a, permissions.DEFAULT_LEVEL)) for a in permissions.AREAS
+    }
     return AutomationOut(
-        enabled=state.enabled, stopped=bool(state.stopped_at), stopped_at=state.stopped_at
+        enabled=state.enabled,
+        stopped=bool(state.stopped_at),
+        stopped_at=state.stopped_at,
+        levels=levels,
+        level_names=permissions.LEVEL_NAMES,
     )
 
 
@@ -445,6 +459,18 @@ async def set_automation(
             principal.user.id,
             "automation.switched",
             f"Automation turned {'on' if body.enabled else 'off'}",
+            device_id=principal.device.id,
+        )
+    if body.levels:
+        state.levels = {**(state.levels or {}), **body.levels}
+        changes = ", ".join(
+            f"{a}: {permissions.LEVEL_NAMES[lv]}" for a, lv in sorted(body.levels.items())
+        )
+        activity.record(
+            session,
+            principal.user.id,
+            "automation.levels",
+            f"Autonomy changed ({changes})",
             device_id=principal.device.id,
         )
     if body.stopped is False and state.stopped_at:

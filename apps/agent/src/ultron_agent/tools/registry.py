@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -24,6 +25,12 @@ TOOLS: dict[str, Tool] = {
     "pc.files.organize": files.organize,
     "pc.files.delete": files.delete,
     "pc.workflows.run": workflows.run,
+    "pc.files.copy": files.copy,
+    "pc.files.rename": files.rename,
+    "pc.apps.running": apps.running,
+    "pc.apps.close": apps.close_app,
+    "pc.web.open": apps.open_url,
+    "pc.notify": apps.notify,
 }
 
 
@@ -35,7 +42,12 @@ def enabled(config: Any) -> list[str]:
             continue
         if name.startswith("pc.files.") and not config.roots:
             continue
-        if name.startswith("pc.apps.") and not config.apps:
+        if (
+            name in ("pc.apps.open", "pc.apps.focus", "pc.apps.close", "pc.apps.list")
+            and not config.apps
+        ):
+            continue
+        if name == "pc.notify" and sys.platform != "win32":
             continue
         if name == "pc.workflows.run" and not config.workflows:
             continue

@@ -27,8 +27,13 @@ Read `PROJECT_STATUS.md` first, then `docs/ARCHITECTURE.md`.
 - Run: `flutter run -d windows`; Android: `flutter build apk --release`.
 
 ## Rules
-- Work phase by phase; start a new phase only after the owner approves it.
-- Never push, merge, reset or force-push without the owner's approval.
+- The owner has authorised autonomous development (2026-11-10): work
+  through the roadmap without asking per phase; commit tested milestones
+  and push them to `claude/fervent-lovelace-fqank5` when all tests pass.
+  Never push to `main`, force-push, merge or reset without asking.
+- Track work in `docs/FEATURE_STATUS.md`, `docs/DEVELOPMENT_LOG.md`,
+  `docs/KNOWN_ISSUES.md` and `CHANGELOG.md`; never claim device testing
+  that didn't happen.
 - Never commit `.env` or print secrets; all settings are `ULTRON_`-prefixed.
 - ULTRON is isolated: never use or change other projects' resources (no
   existing Supabase project, no Netlify). Cloud database = a future,

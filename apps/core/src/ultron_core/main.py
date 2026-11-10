@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 
-from ultron_core import __version__, activity, pairing
+from ultron_core import __version__, activity, modes, notifications, pairing
 from ultron_core.ai import api as ai_api
 from ultron_core.ai.cooldown import CooldownStore
 from ultron_core.ai.providers.base import ChatProvider
@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.generations = GenerationManager()
     app.state.task_engine = TaskEngine(app.state.sessionmaker, app.state.ai_router, settings)
+    app.state.task_engine.redis = app.state.redis
+    app.state.task_engine.http = app.state.http
     try:
         async with app.state.sessionmaker() as session:
             stale = await mark_stale_generations_failed(session)
@@ -119,6 +121,8 @@ def create_app(
     app.include_router(memory_router.router, prefix="/api/v1")
     app.include_router(documents_router.router, prefix="/api/v1")
     app.include_router(pairing.router, prefix="/api/v1")
+    app.include_router(modes.router, prefix="/api/v1")
+    app.include_router(notifications.router, prefix="/api/v1")
     app.include_router(activity.router, prefix="/api/v1")
     app.include_router(tasks_router.router, prefix="/api/v1")
     app.include_router(agents_router.router, prefix="/api/v1")

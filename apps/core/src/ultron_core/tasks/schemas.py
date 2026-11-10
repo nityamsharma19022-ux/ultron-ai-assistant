@@ -144,12 +144,23 @@ class AutomationOut(BaseModel):
     enabled: bool
     stopped: bool
     stopped_at: datetime | None
+    levels: dict[str, int] = Field(default_factory=dict)
+    level_names: dict[int, str] = Field(default_factory=dict)
 
 
 class AutomationUpdate(_Strict):
     enabled: bool | None = None
     # false clears an emergency stop.
     stopped: bool | None = None
+    # Autonomy level 0-5 per area.
+    levels: dict[Literal["core", "pc", "phone"], int] | None = None
+
+    @field_validator("levels")
+    @classmethod
+    def _levels(cls, v: dict[str, int] | None) -> dict[str, int] | None:
+        if v is not None and any(not 0 <= lv <= 5 for lv in v.values()):
+            raise ValueError("levels are 0 to 5")
+        return v
 
 
 class ReminderOut(BaseModel):

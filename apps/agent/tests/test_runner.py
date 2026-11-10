@@ -18,6 +18,7 @@ class FakeCore:
         self.results: list[tuple[str, dict]] = []
         self.refreshes = 0
         self.access = "access-1"
+        self.metrics: dict | None = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -37,6 +38,9 @@ class FakeCore:
             )
         if path.endswith("/progress"):
             return httpx.Response(200, json={"cancel": False})
+        if path == "/api/v1/devices/metrics":
+            self.metrics = json.loads(request.content)
+            return httpx.Response(204)
         if path.endswith("/result"):
             self.results.append((path.split("/")[-2], json.loads(request.content)))
             return httpx.Response(200, json={"cancel": False})
@@ -70,6 +74,7 @@ def test_runs_steps_and_reports(config) -> None:
     )
     run(config, client, once=True)
     assert core.refreshes == 1  # signed in from stored credentials
+    assert 0 <= core.metrics["cpu_percent"] <= 100 and "memory_percent" in core.metrics
     assert core.hello["capabilities"] == capabilities(config)
     assert "pc.files.organize" in core.hello["tools"]
     assert "/" not in json.dumps(core.hello["capabilities"])  # names only, no paths

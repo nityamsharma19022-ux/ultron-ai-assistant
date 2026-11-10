@@ -22,8 +22,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ultron_core.ai.router import AIRouter, Completed, RoutingError, RoutingPreferences
 from ultron_core.ai.types import ChatMessage, ChatRequest, TextDelta
 from ultron_core.tasks import tools
+from ultron_core.tasks.permissions import area_of
 
 MAX_STEPS = 10
+MAX_STEPS_WORKFLOWS = 20
 
 
 class PlanError(Exception):
@@ -57,6 +59,10 @@ class PlanContext:
     capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Device tools announced by online agents (None: every tool of a target).
     device_tools: set[str] | None = None
+    # Areas ULTRON may act in (operating mode and autonomy level 0 remove
+    # areas); None: all.
+    allowed_areas: set[str] | None = None
+    max_steps: int = 10
     origin: str | None = None  # target of the device that asked
     tz: tzinfo = field(default_factory=lambda: ZoneInfo("UTC"))
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -78,11 +84,13 @@ def zone_name(tz: tzinfo) -> str:
     return getattr(tz, "key", None) or str(tz)
 
 
-def build_steps(raw_steps: list[Any]) -> list[PlannedStep]:
+def build_steps(
+    raw_steps: list[Any], *, max_steps: int = MAX_STEPS, allowed_areas: set[str] | None = None
+) -> list[PlannedStep]:
     if not isinstance(raw_steps, list):
         raise PlanError("The plan's steps must be a list.")
-    if len(raw_steps) > MAX_STEPS:
-        raise PlanError(f"The plan has more than {MAX_STEPS} steps.")
+    if len(raw_steps) > max_steps:
+        raise PlanError(f"The plan has more than {max_steps} steps.")
     steps: list[PlannedStep] = []
     for idx, raw in enumerate(raw_steps):
         if not isinstance(raw, dict) or not isinstance(raw.get("tool"), str):
@@ -91,6 +99,11 @@ def build_steps(raw_steps: list[Any]) -> list[PlannedStep]:
             spec, args = tools.validate_step(raw["tool"], raw.get("args"))
         except tools.ToolError as exc:
             raise PlanError(f"Step {idx + 1}: {exc.message}") from None
+        if allowed_areas is not None and area_of(spec.name) not in allowed_areas:
+            raise PlanError(
+                f"Step {idx + 1}: ULTRON isn't allowed to act on the {area_of(spec.name)} "
+                "(operating mode or autonomy level 0)."
+            )
         for ref in ("content_from_step", "source_step"):
             value = getattr(args, ref, None)
             if value is not None and value >= idx:
@@ -127,6 +140,8 @@ def normalize(text: str) -> str:
 def available(ctx: PlanContext, tool: str) -> bool:
     spec = tools.get(tool)
     if spec is None or spec.target not in ctx.targets:
+        return False
+    if ctx.allowed_areas is not None and area_of(tool) not in ctx.allowed_areas:
         return False
     return spec.target == "core" or ctx.device_tools is None or tool in ctx.device_tools
 
@@ -249,7 +264,7 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
             if not available(ctx, tool):
                 return None
             raw = [{"tool": tool, "args": {}}]
-        steps = build_steps(raw)
+        steps = build_steps(raw, allowed_areas=ctx.allowed_areas)
         return Plan(title=steps[0].title, steps=steps, source="rules")
     return None
 
@@ -321,7 +336,7 @@ async def ai_plan(
     max_output_tokens: int = 1500,
 ) -> Plan:
     system = PLANNER_PROMPT.format(
-        max_steps=MAX_STEPS,
+        max_steps=ctx.max_steps,
         now=ctx.now.astimezone(ctx.tz).isoformat(timespec="minutes"),
         tz=zone_name(ctx.tz),
         catalog=json.dumps(
@@ -346,7 +361,9 @@ async def ai_plan(
     except RoutingError as exc:
         raise PlanError(f"No AI is available to plan this ({exc.message}).") from None
     data = parse_plan_json("".join(parts))
-    steps = build_steps(data.get("steps") or [])
+    steps = build_steps(
+        data.get("steps") or [], max_steps=ctx.max_steps, allowed_areas=ctx.allowed_areas
+    )
     answer = data.get("answer")
     title = str(data.get("title") or (steps[0].title if steps else "Answer"))[:200]
     return Plan(

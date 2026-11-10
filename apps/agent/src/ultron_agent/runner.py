@@ -74,12 +74,28 @@ def execute(config: AgentConfig, client: CoreClient, work: dict[str, Any]) -> No
     log.info("step done: %s", result.get("summary", "ok"))
 
 
+METRICS_EVERY = 30.0
+
+
+def push_metrics(config: AgentConfig, client: CoreClient) -> None:
+    from ultron_agent.tools import system
+
+    try:
+        client.metrics(system.metrics(config))
+    except (httpx.HTTPError, OSError) as exc:
+        log.debug("metrics not sent: %s", exc)
+
+
 def run(config: AgentConfig, client: CoreClient, *, once: bool = False) -> None:
     tools = registry.enabled(config)
     backoff = 1.0
     greeted = False
+    last_metrics = 0.0
     while True:
         try:
+            if time.monotonic() - last_metrics >= METRICS_EVERY:
+                push_metrics(config, client)
+                last_metrics = time.monotonic()
             if not greeted:
                 client.hello(tools, capabilities(config))
                 greeted = True

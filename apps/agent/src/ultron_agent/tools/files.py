@@ -344,3 +344,44 @@ def delete(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         "summary": f"Moved {args['path']} to the Recycle Bin",
         "verified": not path.exists(),
     }
+
+
+def copy(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    source = paths.resolve(ctx.config.roots, args["source"], must_exist=True)
+    dest = paths.resolve(ctx.config.roots, args["destination"])
+    if dest.is_dir():
+        dest = dest / source.name
+    if source == dest or (source.is_dir() and source in dest.parents):
+        raise ToolError("Can't copy something onto or into itself")
+    if dest.exists() and not args.get("overwrite"):
+        raise ToolError(f"{args['destination']} already exists (overwriting needs your approval)")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        if dest.exists():
+            raise ToolError("Won't overwrite a folder")
+        shutil.copytree(source, dest)
+    else:
+        shutil.copy2(source, dest)
+    return {
+        "to": paths.display(ctx.config.roots, dest),
+        "summary": f"Copied to {paths.display(ctx.config.roots, dest)}",
+        "verified": dest.exists() and source.exists(),
+    }
+
+
+def rename(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    source = paths.resolve(ctx.config.roots, args["path"], must_exist=True)
+    new_name = str(args["new_name"]).strip()
+    if not new_name or any(c in new_name for c in '/\\:*?"<>|') or new_name in (".", ".."):
+        raise ToolError("That isn't a valid file name")
+    if any(r.resolve() == source for r in ctx.config.roots.values()):
+        raise ToolError("Can't rename an allowed root folder itself")
+    dest = source.with_name(new_name)
+    if dest.exists():
+        raise ToolError(f"Something named {new_name} is already there")
+    source.rename(dest)
+    return {
+        "to": paths.display(ctx.config.roots, dest),
+        "summary": f"Renamed to {new_name}",
+        "verified": dest.exists() and not source.exists(),
+    }

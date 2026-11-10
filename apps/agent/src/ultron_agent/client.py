@@ -106,6 +106,9 @@ class CoreClient:
         resp.raise_for_status()
         return resp.json()
 
+    def metrics(self, values: dict[str, Any]) -> None:
+        self.request("POST", "/api/v1/devices/metrics", json=values).raise_for_status()
+
     def next_step(self, wait: int) -> dict[str, Any] | None:
         resp = self.request("GET", "/api/v1/agents/steps/next", params={"wait": wait})
         if resp.status_code == 204:

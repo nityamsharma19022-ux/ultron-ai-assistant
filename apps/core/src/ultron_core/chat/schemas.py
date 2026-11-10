@@ -130,6 +130,8 @@ class AIStatus(BaseModel):
     local_ai_available: bool
     private_conversations_supported: bool
     providers: list[ProviderStatus]
+    # Preferred providers per kind of request (ULTRON_AI_TASK_PROFILES).
+    task_profiles: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class WarmupResult(BaseModel):

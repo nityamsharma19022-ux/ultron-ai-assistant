@@ -165,6 +165,10 @@ class UserAIPreferences(Base):
     memory_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )
+    # Operating mode (built-in key or a custom mode's key).
+    active_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="normal", server_default="normal"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -363,6 +367,10 @@ class AutomationState(Base):
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Autonomy level 0-5 per area ("core", "pc", "phone"); missing = 3.
+    levels: Mapped[dict[str, int]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
@@ -462,3 +470,69 @@ class DocumentChunk(Base):
     search: Mapped[str] = mapped_column(
         TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
     )
+
+
+# --- Round 2: operating modes, notifications ----------------------------------
+
+
+class AssistantMode(IdMixin, TimestampMixin, Base):
+    """A custom operating mode (built-in modes live in code)."""
+
+    __tablename__ = "assistant_modes"
+    __table_args__ = (Index("ix_assistant_modes_user_key", "user_id", "key", unique=True),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    personality: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ai_mode: Mapped[str | None] = mapped_column(String(20))
+    memory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    tool_areas: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    quiet: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+NOTIFICATION_PRIORITIES = ("low", "normal", "high", "urgent")
+
+
+class Notification(IdMixin, Base):
+    """Something ULTRON wants the user to know (shown on every device)."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        CheckConstraint("priority IN ('low', 'normal', 'high', 'urgent')", name="priority"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index("ix_notifications_dedupe", "user_id", "dedupe_key", unique=True),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    priority: Mapped[str] = mapped_column(String(10), nullable=False, default="normal")
+    task_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # Rules use this so the same situation is only reported once.
+    dedupe_key: Mapped[str | None] = mapped_column(String(120))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class NotificationSettings(Base):
+    __tablename__ = "notification_settings"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Quiet hours in the user's local time, "HH:MM"; None = off.
+    quiet_start: Mapped[str | None] = mapped_column(String(5))
+    quiet_end: Mapped[str | None] = mapped_column(String(5))
+    utc_offset_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Lowest priority that is announced (shown/pushed) outside quiet hours.
+    min_priority: Mapped[str] = mapped_column(String(10), nullable=False, default="normal")
+    daily_briefing: Mapped[str | None] = mapped_column(String(5))  # "HH:MM" local
+    last_briefing_on: Mapped[str | None] = mapped_column(String(10))  # local date

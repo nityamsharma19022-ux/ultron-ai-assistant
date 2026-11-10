@@ -94,6 +94,10 @@ class TaskEngine:
         self._core_runs: dict[uuid.UUID, asyncio.Task[None]] = {}
         self._lock = asyncio.Lock()
         self.tick_seconds = 2.0
+        self.redis = None  # set by the app; enables proactive rules
+        self.http = None  # httpx.AsyncClient (set by the app) for web.read
+        self.proactive_every = timedelta(seconds=30)
+        self._last_proactive = datetime.min.replace(tzinfo=UTC)
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -139,6 +143,7 @@ class TaskEngine:
     async def tick(self) -> None:
         async with self._lock:
             await self._run_schedules()
+            await self._run_proactive()
             async with self.sessionmaker() as s:
                 ids = list(await s.scalars(select(Task.id).where(Task.status.in_(ACTIVE))))
             for task_id in ids:
@@ -232,6 +237,7 @@ class TaskEngine:
                     prefs=prefs,
                     settings=self.settings,
                     results={x.idx: x.result or {} for x in task.steps if x.status == "succeeded"},
+                    http=self.http,
                 )
                 try:
                     spec, args = tools.validate_step(step.tool, resolve_args(step, task.steps))
@@ -345,6 +351,19 @@ class TaskEngine:
         task.error = error
         task.finished_at = now()
         task.summary = task_summary(task)
+        if status == "failed":
+            from ultron_core.notifications import notify
+
+            await notify(
+                s,
+                task.user_id,
+                "task.failed",
+                f"Task failed: {task.title}",
+                error or "",
+                priority="high",
+                task_id=task.id,
+                dedupe_key=f"failed:{task.id}",
+            )
         verb = {"completed": "Completed", "failed": "Failed", "cancelled": "Cancelled"}[status]
         activity.record(
             s,
@@ -374,6 +393,20 @@ class TaskEngine:
             s, task.user_id, "task.cancelled", f"{reason}: {task.title}", task_id=task.id
         )
         await s.commit()
+
+    async def _run_proactive(self, force: bool = False) -> None:
+        if self.redis is None or (
+            not force and now() - self._last_proactive < self.proactive_every
+        ):
+            return
+        self._last_proactive = now()
+        from ultron_core import proactive
+
+        try:
+            async with self.sessionmaker() as s:
+                await proactive.run(s, self.redis, self.settings)
+        except Exception:
+            log.exception("tasks.proactive_failed")
 
     # --- recurring tasks ----------------------------------------------------
 

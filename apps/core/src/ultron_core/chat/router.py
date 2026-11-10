@@ -13,7 +13,9 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ultron_core import ratelimit
+from ultron_core.ai import profiles
 from ultron_core.ai.context import SYSTEM_PROMPT
+from ultron_core.ai.router import RoutingPreferences
 from ultron_core.chat import service
 from ultron_core.chat.generation import ActiveGeneration, ConversationBusyError, GenerationManager
 from ultron_core.chat.schemas import (
@@ -29,6 +31,7 @@ from ultron_core.db.models import Conversation
 from ultron_core.deps import PrincipalDep, RedisDep, SessionDep, SettingsDep
 from ultron_core.documents import service as document_service
 from ultron_core.memory import service as memory_service
+from ultron_core.modes import active_mode
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
 
@@ -200,8 +203,13 @@ async def send_message(
 
     try:
         stored_prefs = await service.get_preferences(session, principal.user)
+        mode = await active_mode(session, principal.user)
         prefs = service.routing_preferences(stored_prefs)
-        memory_on = stored_prefs.memory_enabled
+        if mode.ai_mode:
+            prefs = RoutingPreferences(mode=mode.ai_mode, cloud_order=prefs.cloud_order)  # type: ignore[arg-type]
+        kind = "coding" if mode.key == "developer" else profiles.classify(body.content)
+        prefs = profiles.preferences_for(kind, prefs, settings.ai_task_profiles)
+        memory_on = stored_prefs.memory_enabled and mode.memory
         user_message, assistant_message = await service.start_exchange(
             session, conversation, body.content
         )
@@ -241,6 +249,7 @@ async def send_message(
         settings=settings,
         sessionmaker=request.app.state.sessionmaker,
         system=SYSTEM_PROMPT
+        + mode.prompt()
         + memory_service.context_block(recalled)
         + document_service.context_block(excerpts),
     )

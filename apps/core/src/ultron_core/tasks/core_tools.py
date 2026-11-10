@@ -41,6 +41,7 @@ class CoreContext:
     prefs: RoutingPreferences
     settings: Settings
     results: dict[int, dict[str, Any]]  # earlier steps' results by index
+    http: Any = None  # httpx.AsyncClient for web.read
 
 
 async def run(name: str, args: tools.ToolArgs, ctx: CoreContext) -> dict[str, Any]:
@@ -56,6 +57,8 @@ async def run(name: str, args: tools.ToolArgs, ctx: CoreContext) -> dict[str, An
         return await _docs_search(args, ctx)  # type: ignore[arg-type]
     if name == "docs.read":
         return await _docs_read(args, ctx)  # type: ignore[arg-type]
+    if name == "web.read":
+        return await _web_read(args, ctx)  # type: ignore[arg-type]
     raise ToolError(f"No Core implementation for {name}")
 
 
@@ -92,6 +95,10 @@ async def _ai_write(args: tools.AiWriteArgs, ctx: CoreContext) -> dict[str, Any]
         if not source:
             raise ToolError("The earlier step produced no text to work from.")
         prompt += SOURCE_WRAPPER.format(source=source[:60_000])
+    from ultron_core.ai import profiles
+
+    kind = "summarize" if args.kind == "summary" else "writing"
+    prefs = profiles.preferences_for(kind, ctx.prefs, ctx.settings.ai_task_profiles)
     request = ChatRequest(
         messages=(ChatMessage("user", prompt),),
         system=WRITER_PROMPT.format(kind=args.kind),
@@ -101,7 +108,7 @@ async def _ai_write(args: tools.AiWriteArgs, ctx: CoreContext) -> dict[str, Any]
     provider = None
     try:
         async with contextlib.aclosing(
-            ctx.router.stream(lambda _p: request, ctx.prefs, private=ctx.task.is_private)
+            ctx.router.stream(lambda _p: request, prefs, private=ctx.task.is_private)
         ) as events:
             async for event in events:
                 if isinstance(event, TextDelta):
@@ -161,3 +168,18 @@ async def _docs_read(args: tools.DocReadArgs, ctx: CoreContext) -> dict[str, Any
         raise ToolError(f"No document matching '{args.document}'") from None
     text = await document_service.full_text(ctx.session, doc)
     return {"text": text, "document": doc.name, "summary": f"Read {doc.name}", "verified": True}
+
+
+async def _web_read(args: tools.UrlArgs, ctx: CoreContext) -> dict[str, Any]:
+    from ultron_core import web
+
+    try:
+        page = await web.read(args.url, ctx.http)
+    except web.WebError as exc:
+        raise ToolError(exc.message, retryable=exc.retryable) from None
+    words = len(page["text"].split())
+    return {
+        **page,
+        "summary": f"Read {page['title'] or page['url']} ({words} words)",
+        "verified": True,
+    }

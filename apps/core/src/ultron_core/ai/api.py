@@ -7,6 +7,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request, status
 
 from ultron_core import ratelimit
+from ultron_core.ai import profiles
 from ultron_core.ai.errors import ModelNotInstalledError, ProviderError, ProviderNotConfiguredError
 from ultron_core.ai.router import AIRouter
 from ultron_core.ai.types import ProviderKind
@@ -67,6 +68,7 @@ async def ai_status(
         local_ai_available=local_ready,
         private_conversations_supported=settings.private_conversations_allowed and local_ready,
         providers=items,
+        task_profiles=profiles.parse(settings.ai_task_profiles),
     )
 
 

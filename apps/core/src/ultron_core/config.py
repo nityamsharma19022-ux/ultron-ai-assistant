@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # Default order in which cloud providers are tried. Providers without an
     # API key + model are skipped automatically.
     ai_cloud_providers: str = "groq,gemini,openrouter,custom,anthropic"
+    # Preferred cloud providers per kind of request, e.g.
+    # "coding=groq,openrouter;reasoning=anthropic;summarize=gemini".
+    ai_task_profiles: str = ""
     ai_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     ai_request_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
     ai_max_output_tokens: int = Field(default=2048, ge=64, le=32_000)

@@ -87,6 +87,20 @@ class DocReadArgs(ToolArgs):
     document: str = Field(min_length=1, max_length=255)
 
 
+class UrlArgs(ToolArgs):
+    url: str = Field(min_length=8, max_length=2000, pattern=r"^https?://")
+
+
+class CopyArgs(ToolArgs):
+    source: str = Field(min_length=1, max_length=MAX_PATH)
+    destination: str = Field(min_length=1, max_length=MAX_PATH)
+    overwrite: bool = False
+
+
+class RenameArgs(PathArgs):
+    new_name: str = Field(min_length=1, max_length=255, pattern=r"^[^/\\:*?\"<>|]+$")
+
+
 class AppArgs(ToolArgs):
     app: str = Field(min_length=1, max_length=100)
 
@@ -360,6 +374,72 @@ _SPECS: list[ToolSpec] = [
         max_attempts=1,
     ),
     ToolSpec(
+        "pc.files.copy",
+        "windows",
+        "pc.files.write",
+        "A",
+        CopyArgs,
+        "Copy a file or folder inside the allowed roots. Overwriting asks first.",
+        lambda a: f"Copy {a.source} to {a.destination}",
+        risk_for=_overwrite_risk,
+    ),
+    ToolSpec(
+        "pc.files.rename",
+        "windows",
+        "pc.files.organize",
+        "A",
+        RenameArgs,
+        "Rename a file or folder (new_name is just the name, not a path).",
+        lambda a: f"Rename {a.path} to {a.new_name}",
+    ),
+    ToolSpec(
+        "pc.apps.running",
+        "windows",
+        "pc.system",
+        "A",
+        NoArgs,
+        "List the apps running on the PC.",
+        lambda a: "List running apps on your PC",
+    ),
+    ToolSpec(
+        "pc.apps.close",
+        "windows",
+        "pc.apps.close",
+        "B",
+        AppArgs,
+        "Close an allowed app (unsaved work could be lost, so this always asks).",
+        lambda a: f"Close {a.app} on your PC",
+        max_attempts=1,
+    ),
+    ToolSpec(
+        "pc.web.open",
+        "windows",
+        "pc.apps",
+        "A",
+        UrlArgs,
+        "Open a web page in the PC's default browser.",
+        lambda a: f"Open {a.url[:80]} on your PC",
+    ),
+    ToolSpec(
+        "pc.notify",
+        "windows",
+        "pc.notify",
+        "A",
+        NotifyArgs,
+        "Show a notification on the PC.",
+        lambda a: f"Notify you on the PC: {a.text[:60]}",
+    ),
+    ToolSpec(
+        "web.read",
+        "core",
+        "web.read",
+        "A",
+        UrlArgs,
+        "Read a public web page and return its text. Result: {text}. Use with ai.write "
+        "source_step to summarise it. Only public internet addresses.",
+        lambda a: f"Read the web page {a.url[:80]}",
+    ),
+    ToolSpec(
         "pc.workflows.run",
         "windows",
         "pc.workflows",
@@ -434,6 +514,9 @@ SCOPES: dict[str, str] = {
     "pc.files.organize": "Move and organize files in allowed PC folders",
     "pc.files.delete": "Move files to the Recycle Bin (always asks)",
     "pc.workflows": "Run your saved PC workflows",
+    "pc.apps.close": "Close apps on the PC (always asks)",
+    "pc.notify": "Show notifications on the PC",
+    "web.read": "Read public web pages",
     "phone.system": "Read phone status",
     "phone.apps": "Open apps on the phone",
     "phone.notify": "Show phone notifications",
@@ -441,7 +524,7 @@ SCOPES: dict[str, str] = {
 }
 
 # Scopes whose tools are all class B/C: never auto-approved.
-ALWAYS_ASK_SCOPES = {"pc.files.delete"}
+ALWAYS_ASK_SCOPES = {"pc.files.delete", "pc.apps.close"}
 
 
 def register(spec: ToolSpec, scope_title: str | None = None) -> None:

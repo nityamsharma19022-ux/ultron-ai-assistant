@@ -95,3 +95,108 @@ def _find_window(title_part: str) -> int | None:  # pragma: no cover - Windows o
 
     user32.EnumWindows(callback_type(callback), 0)
     return found[0] if found else None
+
+
+def running(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    import psutil
+
+    seen: dict[str, float] = {}
+    for proc in psutil.process_iter(["name", "memory_info"]):
+        name = proc.info.get("name") or ""
+        mem = proc.info.get("memory_info")
+        if not name or mem is None:
+            continue
+        seen[name] = seen.get(name, 0) + mem.rss / 1e6
+    top = sorted(seen.items(), key=lambda kv: kv[1], reverse=True)[:30]
+    apps = [{"name": n, "memory_mb": round(m)} for n, m in top]
+    return {
+        "apps": apps,
+        "summary": f"{len(seen)} programs running; biggest: "
+        + ", ".join(a["name"] for a in apps[:5]),
+        "verified": True,
+    }
+
+
+def _matches(proc: Any, command: list[str]) -> bool:
+    """Same program; when the app is started with arguments, the same arguments too
+    (so "python script.py" never matches every Python process)."""
+    name = (proc.info.get("name") or "").lower()
+    exe = os.path.basename(command[0]).lower()
+    if name != exe and os.path.splitext(name)[0] != os.path.splitext(exe)[0]:
+        return False
+    if len(command) == 1:
+        return True
+    cmdline = proc.info.get("cmdline") or []
+    return cmdline[1:] == command[1:]
+
+
+def close_app(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Asks an allowed app's processes to close (never this agent or its parents)."""
+    import psutil
+
+    entry = ctx.config.app(args["app"])
+    if entry is None:
+        raise ToolError(f"'{args['app']}' isn't in your allowed apps")
+    command = [os.path.expandvars(c) for c in entry.command]
+    me = psutil.Process()
+    protected = {me.pid, *(p.pid for p in me.parents())}
+    procs = [
+        p
+        for p in psutil.process_iter(["name", "cmdline"])
+        if p.pid not in protected and _matches(p, command)
+    ]
+    if not procs:
+        return {"app": entry.name, "summary": f"{entry.name} wasn't running", "verified": True}
+    for p in procs:
+        try:
+            p.terminate()  # a polite close request, like closing the window
+        except psutil.Error:
+            pass
+    gone, alive = psutil.wait_procs(procs, timeout=8)
+    return {
+        "app": entry.name,
+        "closed": len(gone),
+        "summary": f"Closed {entry.name}"
+        if not alive
+        else f"{entry.name} didn't close ({len(alive)} left)",
+        "verified": not alive,
+    }
+
+
+def open_url(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    import webbrowser
+
+    url = str(args["url"])
+    if not url.startswith(("http://", "https://")):
+        raise ToolError("Only http and https addresses can be opened")
+    ok = webbrowser.open(url, new=2)
+    return {"url": url, "summary": f"Opened {url[:80]}", "verified": bool(ok)}
+
+
+def notify(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """A Windows toast notification (title/text passed as data, not code)."""
+    title = str(args.get("title") or "ULTRON")[:100]
+    text = str(args.get("text") or "")[:500]
+    if not IS_WINDOWS:
+        raise ToolError("PC notifications are only supported on Windows")
+    script = (
+        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+        "ContentType = WindowsRuntime] | Out-Null;"
+        "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
+        "[Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+        "$n = $t.GetElementsByTagName('text');"
+        "$n.Item(0).AppendChild($t.CreateTextNode($env:ULTRON_TITLE)) | Out-Null;"
+        "$n.Item(1).AppendChild($t.CreateTextNode($env:ULTRON_TEXT)) | Out-Null;"
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ULTRON')"
+        ".Show([Windows.UI.Notifications.ToastNotification]::new($t))"
+    )
+    env = {**os.environ, "ULTRON_TITLE": title, "ULTRON_TEXT": text}
+    result = subprocess.run(  # noqa: S603 - fixed script; user text only via environment
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],  # noqa: S607
+        env=env,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    ok = result.returncode == 0
+    return {"summary": "Notification shown" if ok else "Notification failed", "verified": ok}

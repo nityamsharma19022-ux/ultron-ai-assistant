@@ -26,6 +26,12 @@ async def plan_context(
     targets = {"core"}
     capabilities: dict[str, dict[str, Any]] = {}
     device_tools: set[str] = set()
+    from ultron_core.modes import active_mode
+    from ultron_core.tasks.permissions import load_policy
+
+    mode = await active_mode(session, principal.user)
+    policy = await load_policy(session, principal.user.id)
+    allowed = {a for a in mode.tool_areas if policy.level(a) > 0}
     for agent in agents:
         if agent_online(agent) and agent.tools:
             targets.add(agent.target)
@@ -37,6 +43,8 @@ async def plan_context(
         targets=targets,
         capabilities=capabilities,
         device_tools=device_tools,
+        allowed_areas=allowed,
+        max_steps=20 if all(policy.level(a) >= 5 for a in allowed) and allowed else 10,
         origin=PLATFORM_TARGET.get(principal.device.platform),
         tz=zone(timezone, utc_offset_minutes),
     )

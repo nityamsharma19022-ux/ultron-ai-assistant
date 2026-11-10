@@ -72,6 +72,7 @@ async def get_preferences(session: AsyncSession, user: User) -> UserAIPreference
             cloud_order=[],
             private_by_default=False,
             memory_enabled=True,
+            active_mode="normal",
         )
     return prefs
 

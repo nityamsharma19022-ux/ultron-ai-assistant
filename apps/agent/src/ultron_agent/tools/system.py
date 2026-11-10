@@ -11,6 +11,27 @@ import psutil
 from ultron_agent.tools.base import ToolContext
 
 
+def metrics(config: Any) -> dict[str, Any]:
+    """Live numbers for the Command Center (sent every half minute)."""
+    memory = psutil.virtual_memory()
+    out: dict[str, Any] = {
+        "cpu_percent": psutil.cpu_percent(interval=None),
+        "memory_percent": memory.percent,
+        "uptime_hours": round((time.time() - psutil.boot_time()) / 3600, 1),
+    }
+    roots = [r for r in config.roots.values() if r.exists()]
+    if roots:
+        out["disk_free_gb"] = round(psutil.disk_usage(str(roots[0])).free / 1e9, 1)
+    battery = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
+    if battery:
+        out["battery_percent"] = battery.percent
+        out["charging"] = bool(battery.power_plugged)
+    stats = psutil.net_if_stats()
+    up = [n for n, s in stats.items() if s.isup and not n.lower().startswith(("lo", "loopback"))]
+    out["network"] = "connected" if up else "offline"
+    return out
+
+
 def status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     memory = psutil.virtual_memory()
     disks = []
