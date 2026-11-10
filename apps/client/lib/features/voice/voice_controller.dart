@@ -220,7 +220,7 @@ class VoiceController extends Notifier<VoiceState> {
       case SpeakOutcome.noLocalVoice:
         _notice(privateNoOfflineVoice);
       case SpeakOutcome.failed:
-        _notice('Could not read the reply aloud.');
+        _notice("Couldn't speak: no text-to-speech voice is available on this device.");
       case SpeakOutcome.spoken:
         break;
     }

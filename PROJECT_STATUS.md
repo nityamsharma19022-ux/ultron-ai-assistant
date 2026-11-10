@@ -2,6 +2,12 @@
 
 _Last updated: 2026-11-10_
 
+> **Master build (2026-11-10):** ULTRON now has memory, documents, an
+> autonomous task engine with permissions, a Windows agent, an Android
+> system assistant and secure pairing. Current state and test results:
+> [docs/ULTRON_BUILD_STATUS.md](docs/ULTRON_BUILD_STATUS.md); release
+> checklist: [docs/ULTRON_RELEASE_CHECKLIST.md](docs/ULTRON_RELEASE_CHECKLIST.md).
+
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Architecture docs, Docker Compose (Postgres + Redis), env template | ✅ Done |

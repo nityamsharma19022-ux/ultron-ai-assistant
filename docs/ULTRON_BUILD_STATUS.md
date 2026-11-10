@@ -23,6 +23,11 @@ Ollama.
 | 6 | Files and multimodal | ✅ Documents (PDF, DOCX, XLSX, text); images/audio not yet |
 | 7 | Pairing and secure transport | ✅ Pairing codes + HTTPS with pinned certificate |
 | — | Control Center screens for the above | ✅ Tasks, Permissions, Activity, Memory, Agents, Assistant |
+| 8 | QA, docs, release report | ✅ Done in the sandbox; device checks are yours (see below) |
+
+**Release verdict:** built and tested as far as possible without your PC
+and phone; **not yet a complete first release** until the device checks
+in [ULTRON_RELEASE_CHECKLIST.md](ULTRON_RELEASE_CHECKLIST.md) pass.
 | 8 | QA, docs, release report | ⏳ |
 
 ## Stage 0 — Audit (2026-11-10)
@@ -202,15 +207,43 @@ Ollama.
   (`test_long_poll_waits_then_returns_no_work`); fixed by keeping plain IDs
   and replacing `expire_all()` with targeted refreshes.
 
+## Stage 8 — QA, documentation, release report
+- Full suites: backend 203 passed / 11 skipped (live Ollama), app 103
+  passed, agent 31 passed (+1 Windows-only). `ruff` (incl. security rules)
+  and `flutter analyze` clean.
+- CI on GitHub: Core CI, Agent CI (**windows-latest** and ubuntu), App CI
+  (tests, **release APK**, **Windows release build** on windows-latest),
+  all green on the last pushes; APK and Windows build kept as artifacts.
+- Security: `pip-audit` (Core, agent) no known vulnerabilities; secret
+  scan of tracked files clean; see [ULTRON_SECURITY.md](ULTRON_SECURITY.md).
+- End-to-end in the sandbox: real Core (Docker) + real agent process +
+  web build of the app in Chromium; screenshots of Tasks, Permissions,
+  Activity, Memory, Documents, System (agents, assistant), pairing dialog,
+  phone layout and the assistant screen.
+- Fixed in this stage: a misleading "Could not read the reply aloud"
+  message when no voice is available (now says speech isn't available).
+- Docs: [ULTRON_ARCHITECTURE](ULTRON_ARCHITECTURE.md),
+  [ULTRON_SETUP_GUIDE](ULTRON_SETUP_GUIDE.md),
+  [ULTRON_ANDROID_GUIDE](ULTRON_ANDROID_GUIDE.md),
+  [ULTRON_WINDOWS_GUIDE](ULTRON_WINDOWS_GUIDE.md),
+  [ULTRON_SECURITY](ULTRON_SECURITY.md),
+  [ULTRON_RELEASE_CHECKLIST](ULTRON_RELEASE_CHECKLIST.md).
+
 ## Test results (latest run, 2026-11-10)
 - Backend: **203 passed, 11 skipped** (live Ollama tests), ruff clean.
 - App: **103 passed**, `flutter analyze` clean, release APK and web build.
 - Agent: **31 passed** (+1 Windows-only DPAPI test, runs in CI on Windows).
 
 ## Known bugs
-- None open.
+- None open. Known limitations: no wake word (Android restriction,
+  documented); images, scanned PDFs and audio files can't be read; phone
+  steps run only while the app is open; no QR pairing.
 
 ## Device-only verification still required
-- Install the APK on the iQOO phone; sign in; chat.
-- Windows build of the app (needs Visual Studio C++ workload).
-- Real Ollama run (`qwen3.5:4b`) on the PC.
+- iQOO: install the APK, pair over HTTPS, choose ULTRON as the digital
+  assistant, invoke it, phone tools (alarm, open app, notification), voice.
+- Windows PC: run the app (`flutter run -d windows` or the CI build), run
+  the agent and its checklist, start-at-sign-in script.
+- Real cloud AI call with your free key; real Ollama (`qwen3.5:4b`).
+- Full lists: [Windows](ULTRON_WINDOWS_GUIDE.md#4-verification-checklist-on-your-pc),
+  [Android](ULTRON_ANDROID_GUIDE.md#7-verification-checklist-on-the-iqoo).
