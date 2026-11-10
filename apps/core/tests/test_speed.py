@@ -172,4 +172,20 @@ async def test_chat_ranks_by_measured_speed_and_races_in_instant(migrated_databa
         )
         assert r.status_code == 200
         assert (len(first.calls), len(second.calls)) == (calls[0] + 1, calls[1] + 1)
+        # An order set by hand in Settings wins: no ranking, no race.
+        r = await client.put(
+            "/api/v1/ai/preferences",
+            json={"mode": "auto", "cloud_order": ["freellmapi"]},
+            headers=h,
+        )
+        assert r.status_code == 200, r.text
+        for response_mode in ("balanced", "instant"):
+            calls = (len(first.calls), len(second.calls))
+            r = await client.post(
+                f"/api/v1/conversations/{cid}/messages",
+                json={"content": "mine", "response_mode": response_mode},
+                headers=h,
+            )
+            assert r.json()["assistant_message"]["provider"] == "freellmapi"
+            assert (len(first.calls), len(second.calls)) == (calls[0] + 1, calls[1])
     speed.forget()

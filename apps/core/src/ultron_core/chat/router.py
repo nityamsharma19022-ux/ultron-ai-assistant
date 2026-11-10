@@ -259,8 +259,10 @@ async def send_message(
             kind = "reasoning"
         prefs = profiles.preferences_for(kind, prefs, settings.ai_task_profiles)
         ai_router = request.app.state.ai_router
-        if settings.ai_rank_by_speed and speed != "deep" and not conversation.is_private:
-            # Fastest providers first; Deep mode keeps your chosen order (quality).
+        # An order the owner set by hand in Settings always wins: no ranking, no race.
+        by_speed = not stored_prefs.cloud_order and not conversation.is_private
+        if settings.ai_rank_by_speed and speed != "deep" and by_speed:
+            # Fastest providers first; Deep mode keeps the configured order (quality).
             base = [*prefs.cloud_order, *ai_router.default_cloud_order]
             order = list(dict.fromkeys(base))
             preferred = profiles.parse(settings.ai_task_profiles).get(kind, [])
@@ -268,7 +270,7 @@ async def send_message(
             prefs = RoutingPreferences(
                 mode=prefs.mode, cloud_order=ai_speed.rank(order, preferred, averages)
             )
-        race = 2 if speed == "instant" and settings.ai_instant_race else 1
+        race = 2 if speed == "instant" and settings.ai_instant_race and by_speed else 1
         memory_on = stored_prefs.memory_enabled and mode.memory
         offset = body.utc_offset_minutes
         if offset is None:
