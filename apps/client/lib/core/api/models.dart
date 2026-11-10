@@ -184,6 +184,7 @@ class ProviderStatus {
     this.reason,
     this.cooldownRemainingSeconds,
     this.modelLoaded,
+    this.processor,
   });
   factory ProviderStatus.fromJson(Map<String, dynamic> j) => ProviderStatus(
     name: j['name'] as String,
@@ -195,6 +196,7 @@ class ProviderStatus {
     reason: j['reason'] as String?,
     cooldownRemainingSeconds: j['cooldown_remaining_seconds'] as int?,
     modelLoaded: j['model_loaded'] as bool?,
+    processor: j['processor'] as String?,
   );
   final String name;
   final String kind;
@@ -205,6 +207,9 @@ class ProviderStatus {
   final String? reason;
   final int? cooldownRemainingSeconds;
   final bool? modelLoaded;
+
+  /// Where the loaded local model runs: `gpu`, `cpu` or `partial`.
+  final String? processor;
   bool get isLocal => kind == 'local';
 }
 

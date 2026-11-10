@@ -65,6 +65,16 @@ void main() {
     expect(find.text('Not loaded (first reply will be slower)'), findsOneWidget);
   });
 
+  testWidgets('shows whether the local model runs on the GPU or the CPU', (tester) async {
+    final backend = FakeBackend();
+    backend.routes['GET /api/v1/ai/status'] = (_, _) async =>
+        FakeBackend.json(200, FakeBackend.aiStatus(processor: 'cpu'));
+    await pumpUltron(tester, backend, signedIn: true, size: _tall);
+    await openDashboard(tester);
+    expect(find.text('Processor (CPU), slower'), findsOneWidget);
+    expect(find.text('Graphics card (GPU)'), findsNothing);
+  });
+
   testWidgets('signing out another device asks first, then removes it', (tester) async {
     final backend = FakeBackend();
     await pumpUltron(tester, backend, signedIn: true, size: _tall);

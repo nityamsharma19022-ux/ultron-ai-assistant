@@ -93,7 +93,7 @@ class FakeBackend {
     },
   };
 
-  static Map<String, dynamic> aiStatus({bool cloud = true, bool local = true}) => {
+  static Map<String, dynamic> aiStatus({bool cloud = true, bool local = true, String? processor}) => {
     'mode': 'auto',
     'cloud_available': cloud,
     'local_ai_available': local,
@@ -115,6 +115,7 @@ class FakeBackend {
         'available': local,
         'status': local ? 'ready' : 'unavailable',
         'model_loaded': local,
+        'processor': ?processor,
       },
     ],
   };

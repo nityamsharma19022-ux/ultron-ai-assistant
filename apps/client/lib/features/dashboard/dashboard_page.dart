@@ -398,6 +398,17 @@ class _LocalModelCard extends ConsumerWidget {
               false => 'Not loaded (first reply will be slower)',
               null => 'Unknown',
             }, color: loaded == true ? UltronColors.success : UltronColors.textMuted),
+            if (local.processor case final p?)
+              _Row(
+                'Runs on',
+                switch (p) {
+                  'gpu' => 'Graphics card (GPU)',
+                  'partial' => 'Partly GPU, partly CPU',
+                  _ => 'Processor (CPU), slower',
+                },
+                color: p == 'gpu' ? UltronColors.success : UltronColors.warning,
+                detail: p == 'gpu' ? null : 'See docs/PERFORMANCE_REPORT.md for how to use the GPU.',
+              ),
           ],
           const SizedBox(height: 12),
           Wrap(
