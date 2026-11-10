@@ -55,9 +55,13 @@ async def _load(session: AsyncSession, user_id: uuid.UUID, task_id: uuid.UUID) -
 
 
 async def _out(session: AsyncSession, task_id: uuid.UUID) -> TaskOut:
-    session.expire_all()
+    # Fresh copies of this task and its steps only (other objects, like the
+    # signed-in user, stay loaded).
     task = await session.scalar(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.steps))
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.steps))
+        .execution_options(populate_existing=True)
     )
     return TaskOut.model_validate(task)
 
@@ -90,8 +94,7 @@ async def _wait(session: AsyncSession, task_id: uuid.UUID, seconds: float) -> No
     loop = asyncio.get_running_loop()
     deadline = loop.time() + seconds
     while loop.time() < deadline:
-        session.expire_all()
-        task = await session.get(Task, task_id)
+        task = await session.get(Task, task_id, populate_existing=True)
         if task is None or task.status in (*TERMINAL, "awaiting_approval"):
             return
         await asyncio.sleep(0.2)
@@ -107,7 +110,7 @@ async def assistant_command(
 ) -> CommandOut:
     if body.private and not settings.private_conversations_allowed:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=PRIVATE_NOT_ALLOWED)
-    ctx = await service.plan_context(session, principal, body.timezone)
+    ctx = await service.plan_context(session, principal, body.timezone, body.utc_offset_minutes)
     plan = planner.rule_plan(body.text, ctx)
     if plan is None:
         prefs = routing_preferences(await get_preferences(session, principal.user))

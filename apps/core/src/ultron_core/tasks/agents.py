@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -84,6 +85,13 @@ class StepControl(BaseModel):
     cancel: bool
 
 
+@dataclass(frozen=True)
+class _Me:
+    user_id: uuid.UUID
+    device_id: uuid.UUID
+    device_name: str
+
+
 def _target(principal: Principal) -> str:
     target = TARGETS.get(principal.device.platform)
     if target is None:
@@ -93,8 +101,8 @@ def _target(principal: Principal) -> str:
     return target
 
 
-async def _agent(session: AsyncSession, principal: Principal) -> AgentInfo:
-    agent = await session.get(AgentInfo, principal.device.id)
+async def _agent(session: AsyncSession, device_id: uuid.UUID) -> AgentInfo:
+    agent = await session.get(AgentInfo, device_id, populate_existing=True)
     if agent is None:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Say hello first (POST /agents/hello)")
     return agent
@@ -149,13 +157,13 @@ async def list_agents(principal: PrincipalDep, session: SessionDep) -> list[Agen
     return [_out(a, d) for a, d in rows]
 
 
-async def _claim(session: AsyncSession, principal: Principal, agent: AgentInfo) -> StepWork | None:
+async def _claim(session: AsyncSession, me: _Me, agent: AgentInfo) -> StepWork | None:
     agent.last_seen_at = datetime.now(UTC)
     step = await session.scalar(
         select(TaskStep)
         .join(Task, Task.id == TaskStep.task_id)
         .where(
-            Task.user_id == principal.user.id,
+            Task.user_id == me.user_id,
             Task.status.in_(ACTIVE),
             TaskStep.status == "ready",
             TaskStep.target == agent.target,
@@ -180,9 +188,9 @@ async def _claim(session: AsyncSession, principal: Principal, agent: AgentInfo) 
         return None
     step.status = "running"
     step.attempts += 1
-    step.assigned_device_id = principal.device.id
+    step.assigned_device_id = me.device_id
     step.started_at = datetime.now(UTC)
-    step.progress = "Started on " + principal.device.name
+    step.progress = "Started on " + me.device_name
     await session.commit()
     return StepWork(
         id=step.id,
@@ -203,20 +211,21 @@ async def next_step(
     wait: int = Query(default=20, ge=0, le=MAX_WAIT),
 ) -> Any:
     """Long poll: returns the next step, or 204 after ``wait`` seconds."""
-    agent = await _agent(session, principal)
+    # Plain values: ORM objects expire on commit and can't lazy-load here.
+    me = _Me(principal.user.id, principal.device.id, principal.device.name)
+    agent = await _agent(session, me.device_id)
     engine: TaskEngine = request.app.state.task_engine
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     while True:
-        work = await _claim(session, principal, agent)
+        work = await _claim(session, me, agent)
         if work is not None:
             engine.wake()
             return work
         if loop.time() >= deadline or await request.is_disconnected():
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         await asyncio.sleep(1.0)
-        session.expire_all()
-        agent = await _agent(session, principal)
+        agent = await _agent(session, me.device_id)
 
 
 async def _assigned_step(

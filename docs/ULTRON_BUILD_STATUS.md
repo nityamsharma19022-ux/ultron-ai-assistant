@@ -19,10 +19,10 @@ Ollama.
 | 2 | Memory, context, tool registry | ✅ Backend done and tested |
 | 3 | Task engine, permissions, agents protocol | ✅ Backend done and tested |
 | 4 | Windows desktop agent | ✅ Built; E2E verified on Linux; Windows run pending |
-| 5 | Android system assistant | ⏳ |
+| 5 | Android system assistant | ✅ Built, APK compiles; phone test pending |
 | 6 | Files and multimodal | ⏳ |
 | 7 | Pairing and secure transport | ⏳ |
-| — | Control Center screens for the above | ⏳ |
+| — | Control Center screens for the above | ✅ Tasks, Permissions, Activity, Memory, Agents, Assistant |
 | 8 | QA, docs, release report | ⏳ |
 
 ## Stage 0 — Audit (2026-11-10)
@@ -102,9 +102,61 @@ Ollama.
   `ubuntu-latest`; **App CI** now also builds the release APK and the
   Windows app on GitHub's machines and keeps them as downloadable artifacts.
 
+## Stage 5 — Android system assistant
+- Native Kotlin (`apps/client/android`): `UltronVoiceInteractionService`,
+  `UltronSessionService` + session (opens ULTRON's assistant screen via
+  `startAssistantActivity`), `UltronRecognitionService` (required by
+  Android; passes speech requests to the phone's own recognizer, the
+  on-device one when offline is preferred; only used on Android 11 and
+  older), `ACTION_ASSIST` / `VOICE_COMMAND` on the main activity, lock-screen
+  launch flag (`supportsLaunchVoiceAssistFromKeyguard`).
+- ULTRON does **not** take the assistant role itself: the System page links
+  to Android's "Digital assistant app" setting and shows whether ULTRON
+  holds the role (`RoleManager.isRoleHeld`).
+- Phone tools over a method channel: status (battery, network), open apps
+  by name (launcher query), alarms and timers through the clock app,
+  notifications (asks for Android 13+ notification permission).
+- Flutter: assistant screen (greets "Yes, I'm listening. What do you
+  need?", listens, runs the command or answers, speaks the result, approve
+  / always allow / no for tasks that need approval; "stop", "never mind",
+  "go to sleep" close it). The phone acts as ULTRON's phone agent while the
+  app is open; due reminders show as phone notifications and in the app.
+- **Wake word:** not implemented. Android only lets system/privileged apps
+  use always-on hotword detection (`AlwaysOnHotwordDetector` /
+  `HotwordDetectionService` need system permissions); an ordinary app would
+  have to keep the microphone open in a foreground service, which drains
+  the battery and shows a permanent notification. The supported
+  alternative is the system assistant gesture (long-press home / power,
+  corner swipe, depending on the phone) once ULTRON is the default
+  assistant. Not tested on the iQOO.
+- **Result:** `flutter build apk --release` succeeds (57.2 MB); manifest
+  contains the services and assist filters. **Not installed or tested on a
+  phone** (no device or KVM emulator here).
+
+## Control Center (Flutter)
+- New sections: **Tasks** (command bar typed or spoken, task cards with
+  steps/status, approve, always allow, reject, pause, resume, cancel,
+  retry, repeat hourly/daily/weekly, STOP ALL emergency button;
+  Permissions tab with master switch and per-scope toggles; Activity tab),
+  **Memory** (search, add, edit, pin, private, delete, export as JSON,
+  delete all, "use memories in chat").
+- System page: Agents card (online devices, their apps/workflows) and
+  Assistant card (default-assistant status, "Talk to ULTRON").
+- Tests: +19 widget tests (93 total). They found and fixed four bugs: a
+  disposed text field in the memory dialog, `ref` used in `dispose`, the
+  phone agent starting during provider build, and timers left by the agent
+  loop.
+
+## Bugs found by the end-to-end run and fixed
+- **Agent long poll returned HTTP 500** when there was no work and it
+  waited more than one round (expired ORM objects lazy-loading in async).
+  Seen in the real agent's log; reproduced in a new test
+  (`test_long_poll_waits_then_returns_no_work`); fixed by keeping plain IDs
+  and replacing `expire_all()` with targeted refreshes.
+
 ## Test results (latest run, 2026-11-10)
-- Backend: **190 passed, 11 skipped** (live Ollama tests), ruff clean.
-- App: 74 passed (unchanged since Phase 3; new screens come later).
+- Backend: **192 passed, 11 skipped** (live Ollama tests), ruff clean.
+- App: **93 passed**, `flutter analyze` clean, release APK builds.
 - Agent: 29 passed (+1 Windows-only, runs in CI).
 
 ## Known bugs

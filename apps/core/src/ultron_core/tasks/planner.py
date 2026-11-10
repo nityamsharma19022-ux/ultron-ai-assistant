@@ -15,7 +15,7 @@ import contextlib
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -58,17 +58,24 @@ class PlanContext:
     # Device tools announced by online agents (None: every tool of a target).
     device_tools: set[str] | None = None
     origin: str | None = None  # target of the device that asked
-    tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("UTC"))
+    tz: tzinfo = field(default_factory=lambda: ZoneInfo("UTC"))
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-def zone(name: str | None) -> ZoneInfo:
-    if not name:
-        return ZoneInfo("UTC")
-    try:
-        return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return ZoneInfo("UTC")
+def zone(name: str | None, utc_offset_minutes: int | None = None) -> tzinfo:
+    """The user's time zone: an IANA name, else a fixed UTC offset, else UTC."""
+    if name:
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    if utc_offset_minutes is not None:
+        return timezone(timedelta(minutes=utc_offset_minutes))
+    return ZoneInfo("UTC")
+
+
+def zone_name(tz: tzinfo) -> str:
+    return getattr(tz, "key", None) or str(tz)
 
 
 def build_steps(raw_steps: list[Any]) -> list[PlannedStep]:
@@ -316,7 +323,7 @@ async def ai_plan(
     system = PLANNER_PROMPT.format(
         max_steps=MAX_STEPS,
         now=ctx.now.astimezone(ctx.tz).isoformat(timespec="minutes"),
-        tz=ctx.tz.key,
+        tz=zone_name(ctx.tz),
         catalog=json.dumps(
             [e for e in tools.catalog(ctx.targets) if available(ctx, e["tool"])],
             separators=(",", ":"),

@@ -3,11 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/api/models.dart';
+import '../../core/api/task_models.dart';
+import '../../core/platform/native.dart';
+import '../../core/providers.dart';
 import '../../core/auth/session.dart';
 import '../../core/status/system_status.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/connection_indicator.dart';
 import '../../widgets/glass_panel.dart';
+import '../agent/phone_agent.dart';
+import '../assistant/assistant_screen.dart';
 import '../visualizer/chat_visualizer.dart';
 import 'dashboard_controller.dart';
 
@@ -26,11 +31,14 @@ class DashboardPage extends ConsumerWidget {
           _LocalModelCard(status: status),
           _ProvidersCard(status: status),
           const _DevicesCard(),
+          const _AgentsCard(),
+          const _AssistantCard(),
         ];
         return RefreshIndicator(
           onRefresh: () async {
             await ref.read(systemStatusProvider.notifier).refresh();
             ref.invalidate(devicesProvider);
+            ref.invalidate(agentsProvider);
           },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -43,9 +51,29 @@ class DashboardPage extends ConsumerWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: Column(children: [cards[0], const SizedBox(height: 16), cards[1]])),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          cards[0],
+                          const SizedBox(height: 16),
+                          cards[1],
+                          const SizedBox(height: 16),
+                          cards[5],
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 16),
-                    Expanded(child: Column(children: [cards[2], const SizedBox(height: 16), cards[3]])),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          cards[2],
+                          const SizedBox(height: 16),
+                          cards[4],
+                          const SizedBox(height: 16),
+                          cards[3],
+                        ],
+                      ),
+                    ),
                   ],
                 ),
             ],
@@ -411,5 +439,120 @@ class _DevicesCard extends ConsumerWidget {
     } on ApiException catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
+  }
+}
+
+/// Devices running ULTRON agents (the Windows agent, the phone app).
+final agentsProvider = FutureProvider<List<AgentStatus>>((ref) => ref.watch(apiProvider).agents());
+
+class _AgentsCard extends ConsumerWidget {
+  const _AgentsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agents = ref.watch(agentsProvider);
+    return _Card(
+      key: const Key('agents-card'),
+      title: 'AGENTS',
+      icon: Icons.smart_toy_outlined,
+      child: agents.when(
+        loading: () => const LinearProgressIndicator(minHeight: 2),
+        error: (e, _) => Text(e is ApiException ? e.message : 'Could not load agents'),
+        data: (list) => list.isEmpty
+            ? const Text(
+                'No agents yet. Install the ULTRON Windows agent on your PC (apps/agent) so ULTRON '
+                'can act there; the phone app acts as the phone agent while it is open.',
+                style: TextStyle(color: UltronColors.textSecondary, fontSize: 13),
+              )
+            : Column(
+                children: [
+                  for (final a in list)
+                    _Row(
+                      a.deviceName,
+                      a.online ? 'Online' : 'Offline',
+                      color: a.online ? UltronColors.success : UltronColors.textMuted,
+                      detail: [
+                        a.target == 'windows' ? 'PC agent' : 'Phone',
+                        '${a.tools.length} actions',
+                        if ((a.capabilities['apps'] ?? const []).isNotEmpty && a.target == 'windows')
+                          'apps: ${a.capabilities['apps']!.join(', ')}',
+                        if ((a.capabilities['workflows'] ?? const []).isNotEmpty)
+                          'workflows: ${a.capabilities['workflows']!.join(', ')}',
+                      ].join(' · '),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+final defaultAssistantProvider = FutureProvider<bool?>(
+  (ref) => ref.watch(assistantPlatformProvider).isDefaultAssistant(),
+);
+
+class _AssistantCard extends ConsumerWidget {
+  const _AssistantCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final platform = ref.watch(assistantPlatformProvider);
+    final isDefault = ref.watch(defaultAssistantProvider).value;
+    final phoneAgent = ref.watch(phoneAgentProvider);
+    return _Card(
+      key: const Key('assistant-card'),
+      title: 'ASSISTANT',
+      icon: Icons.graphic_eq,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (platform.supported) ...[
+            _Row(
+              'Phone assistant',
+              isDefault == true ? 'ULTRON is your digital assistant' : 'Not your digital assistant yet',
+              color: isDefault == true ? UltronColors.success : UltronColors.warning,
+              detail: isDefault == true
+                  ? 'Long-press the home button, swipe from a corner or use the power button '
+                        '(depending on your phone) to talk to ULTRON.'
+                  : 'Choose ULTRON in Settings → Apps → Default apps → Digital assistant app.',
+            ),
+            _Row(
+              'Phone actions',
+              phoneAgent.active ? 'Ready while ULTRON is open' : 'Off',
+              color: phoneAgent.active ? UltronColors.success : UltronColors.textMuted,
+              detail: phoneAgent.error ?? phoneAgent.lastStep,
+            ),
+          ] else
+            const _Row(
+              'Phone assistant',
+              'Set up on your Android phone',
+              color: UltronColors.textMuted,
+              detail: 'On this device, use the Assistant button or the Tasks command bar.',
+            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                key: const Key('try-assistant'),
+                onPressed: () => AssistantScreen.open(context),
+                icon: const Icon(Icons.mic),
+                label: const Text('Talk to ULTRON'),
+              ),
+              if (platform.supported)
+                OutlinedButton(
+                  key: const Key('choose-assistant'),
+                  onPressed: () async {
+                    await platform.openAssistantSettings();
+                    ref.invalidate(defaultAssistantProvider);
+                  },
+                  child: const Text('Choose default assistant'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

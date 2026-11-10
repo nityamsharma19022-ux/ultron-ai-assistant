@@ -8,6 +8,7 @@ import 'api_exception.dart';
 import 'idle_timeout.dart';
 import 'models.dart';
 import 'sse.dart';
+import 'task_models.dart';
 
 /// Events of a streamed reply (mirrors the backend's SSE events).
 sealed class ChatStreamEvent {
@@ -161,6 +162,146 @@ class UltronApi {
 
   Future<WarmupResult> warmupLocalModel() async =>
       WarmupResult.fromJson(await _json('POST', '/api/v1/ai/local/warmup', timeout: const Duration(minutes: 4)));
+
+  // ------------------------------------------------- assistant and tasks
+
+  /// One entry point for commands and questions (typed or spoken).
+  Future<CommandResult> assistantCommand(
+    String text, {
+    bool wait = false,
+    bool private = false,
+    String source = 'text',
+    String? timezone,
+  }) async => CommandResult.fromJson(
+    await _json(
+      'POST',
+      '/api/v1/assistant/command',
+      body: {
+        'text': text,
+        'wait': wait,
+        'private': private,
+        'source': source,
+        'timezone': ?timezone,
+        'utc_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+      },
+      timeout: const Duration(seconds: 90),
+    ),
+  );
+
+  Future<List<TaskInfo>> tasks({String? status, int limit = 50}) async => [
+    for (final t in await _json('GET', '/api/v1/tasks', query: {'limit': '$limit', 'status': ?status}) as List)
+      TaskInfo.fromJson(t as Map<String, dynamic>),
+  ];
+
+  Future<TaskInfo> task(String id) async => TaskInfo.fromJson(await _json('GET', '/api/v1/tasks/$id'));
+
+  Future<TaskInfo> approveTask(String id, {bool remember = false}) async =>
+      TaskInfo.fromJson(await _json('POST', '/api/v1/tasks/$id/approve', body: {'remember': remember}));
+
+  /// cancel | reject | pause | resume | retry
+  Future<TaskInfo> controlTask(String id, String action) async =>
+      TaskInfo.fromJson(await _json('POST', '/api/v1/tasks/$id/$action'));
+
+  Future<void> repeatTask(String id, {required String every, String? at, String? timezone}) =>
+      _json('POST', '/api/v1/tasks/$id/repeat', body: {'every': every, 'at': ?at, 'timezone': ?timezone});
+
+  Future<List<PermissionInfo>> permissions() async => [
+    for (final p in await _json('GET', '/api/v1/permissions') as List)
+      PermissionInfo.fromJson(p as Map<String, dynamic>),
+  ];
+
+  Future<PermissionInfo> setPermission(String scope, {required bool enabled, int? expiresInDays}) async =>
+      PermissionInfo.fromJson(
+        await _json('PUT', '/api/v1/permissions/$scope', body: {'enabled': enabled, 'expires_in_days': ?expiresInDays}),
+      );
+
+  Future<AutomationInfo> automation() async => AutomationInfo.fromJson(await _json('GET', '/api/v1/automation'));
+
+  Future<AutomationInfo> setAutomation({bool? enabled, bool? stopped}) async => AutomationInfo.fromJson(
+    await _json('PUT', '/api/v1/automation', body: {'enabled': ?enabled, 'stopped': ?stopped}),
+  );
+
+  Future<AutomationInfo> emergencyStop() async =>
+      AutomationInfo.fromJson(await _json('POST', '/api/v1/automation/emergency-stop'));
+
+  Future<List<ActivityItem>> activity({int limit = 50, int? beforeSeq}) async => [
+    for (final a in await _json(
+      'GET',
+      '/api/v1/activity',
+      query: {'limit': '$limit', 'before_seq': ?beforeSeq?.toString()},
+    ) as List)
+      ActivityItem.fromJson(a as Map<String, dynamic>),
+  ];
+
+  Future<List<ReminderItem>> reminders({bool due = false}) async => [
+    for (final r in await _json('GET', '/api/v1/reminders', query: {'due': '$due'}) as List)
+      ReminderItem.fromJson(r as Map<String, dynamic>),
+  ];
+
+  Future<void> markReminder(String id, {bool? done, bool? delivered}) =>
+      _json('PATCH', '/api/v1/reminders/$id', body: {'done': ?done, 'delivered': ?delivered});
+
+  // ------------------------------------------------------------ memory
+
+  Future<List<MemoryItem>> memories({String? query, int limit = 200}) async => [
+    for (final m in await _json('GET', '/api/v1/memories', query: {'limit': '$limit', 'q': ?query}) as List)
+      MemoryItem.fromJson(m as Map<String, dynamic>),
+  ];
+
+  Future<MemoryItem> createMemory(
+    String content, {
+    String kind = 'note',
+    bool pinned = false,
+    bool private = false,
+  }) async => MemoryItem.fromJson(
+    await _json(
+      'POST',
+      '/api/v1/memories',
+      body: {'content': content, 'kind': kind, 'pinned': pinned, 'is_private': private},
+    ),
+  );
+
+  Future<MemoryItem> updateMemory(String id, {String? content, String? kind, bool? pinned, bool? private}) async =>
+      MemoryItem.fromJson(
+        await _json(
+          'PATCH',
+          '/api/v1/memories/$id',
+          body: {'content': ?content, 'kind': ?kind, 'pinned': ?pinned, 'is_private': ?private},
+        ),
+      );
+
+  Future<void> deleteMemory(String id) => _json('DELETE', '/api/v1/memories/$id', expectBody: false);
+
+  Future<Map<String, dynamic>> exportMemories() async =>
+      (await _json('GET', '/api/v1/memories/export') as Map).cast<String, dynamic>();
+
+  Future<void> deleteAllMemories() => _json('DELETE', '/api/v1/memories', query: {'confirm': 'delete-all'});
+
+  // ------------------------------------------------------------ agents
+
+  Future<List<AgentStatus>> agents() async => [
+    for (final a in await _json('GET', '/api/v1/agents') as List) AgentStatus.fromJson(a as Map<String, dynamic>),
+  ];
+
+  Future<void> agentHello(List<String> tools, {Map<String, List<String>> capabilities = const {}, String? version}) =>
+      _json('POST', '/api/v1/agents/hello', body: {'tools': tools, 'capabilities': capabilities, 'version': ?version});
+
+  /// Long poll; null when there is no work.
+  Future<StepWork?> nextStep({int wait = 20}) async {
+    final j = await _json(
+      'GET',
+      '/api/v1/agents/steps/next',
+      query: {'wait': '$wait'},
+      timeout: Duration(seconds: wait + 15),
+    );
+    return j == null ? null : StepWork.fromJson(j as Map<String, dynamic>);
+  }
+
+  Future<void> stepResult(String stepId, {required bool ok, Map<String, dynamic>? result, String? error}) => _json(
+    'POST',
+    '/api/v1/agents/steps/$stepId/result',
+    body: {'ok': ok, 'result': result ?? <String, dynamic>{}, 'error': ?error},
+  );
 
   // ------------------------------------------------------------ chat
 

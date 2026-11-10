@@ -13,6 +13,7 @@ import 'package:ultron_app/core/auth/token_store.dart';
 import 'package:ultron_app/core/providers.dart';
 import 'package:ultron_app/core/settings/app_settings.dart';
 import 'package:ultron_app/features/shell/sections.dart';
+import 'package:ultron_app/core/platform/native.dart';
 import 'package:ultron_app/features/voice/speech_engines.dart';
 import 'package:ultron_app/features/voice/voice_controller.dart';
 
@@ -139,6 +140,230 @@ class FakeBackend {
     'already_loaded': false,
     'seconds': 2.5,
   };
+
+  // ------------------------------------------------- tasks, memory, agents
+  final tasks = <Map<String, dynamic>>[];
+  final memories = <Map<String, dynamic>>[];
+  final activity = <Map<String, dynamic>>[];
+  final agents = <Map<String, dynamic>>[];
+  final dueReminders = <Map<String, dynamic>>[];
+  final deliveredReminders = <String>[];
+  final stepResults = <String, Map<String, dynamic>>{};
+  final pendingSteps = <Map<String, dynamic>>[];
+  Map<String, dynamic>? agentHelloBody;
+  bool automationEnabled = true;
+  bool automationStopped = false;
+  final grants = <String>{};
+  final commands = <String>[];
+
+  /// How /assistant/command answers; default: a completed one-step task.
+  Map<String, dynamic> Function(String text) commandReply = (text) => {
+    'type': 'answer',
+    'message': 'You said: $text',
+    'task': null,
+  };
+
+  static const permissionCatalog = [
+    ('memory.write', 'Save memories', false),
+    ('reminders', 'Create reminders', false),
+    ('pc.apps', 'Open and switch apps on the PC', false),
+    ('pc.files.organize', 'Move and organize files in allowed PC folders', false),
+    ('pc.files.delete', 'Move files to the Recycle Bin (always asks)', true),
+    ('phone.apps', 'Open apps on the phone', false),
+  ];
+
+  Map<String, dynamic> task(String id, String title, String status, List<Map<String, dynamic>> steps) => {
+    'id': id,
+    'title': title,
+    'request': title,
+    'status': status,
+    'plan_source': 'rules',
+    'is_private': false,
+    'summary': null,
+    'error': null,
+    'schedule_id': null,
+    'created_at': '2026-11-10T10:00:00Z',
+    'updated_at': '2026-11-10T10:00:00Z',
+    'started_at': null,
+    'finished_at': null,
+    'steps': steps,
+  };
+
+  static Map<String, dynamic> step(
+    String id,
+    String title,
+    String status, {
+    String tool = 'pc.apps.open',
+    String risk = 'A',
+    String target = 'windows',
+    Map<String, dynamic>? result,
+  }) => {
+    'id': id,
+    'idx': 0,
+    'tool': tool,
+    'args': <String, dynamic>{},
+    'title': title,
+    'target': target,
+    'risk': risk,
+    'scope': 'pc.apps',
+    'status': status,
+    'approved': false,
+    'attempts': 0,
+    'max_attempts': 2,
+    'result': result,
+    'error': null,
+    'progress': null,
+    'started_at': null,
+    'finished_at': null,
+  };
+
+  Map<String, dynamic> _automation() => {
+    'enabled': automationEnabled,
+    'stopped': automationStopped,
+    'stopped_at': null,
+  };
+
+  Future<http.StreamedResponse>? _more(http.BaseRequest r, String body) {
+    final path = r.url.path;
+    final key = '${r.method} $path';
+    Map<String, dynamic> b() => body.isEmpty ? <String, dynamic>{} : jsonDecode(body) as Map<String, dynamic>;
+    Future<http.StreamedResponse> ok(Object? data, [int status = 200]) => Future.value(json(status, data));
+    final taskAction = RegExp(r'^/api/v1/tasks/([^/]+)/(approve|reject|cancel|pause|resume|retry|repeat)$')
+        .firstMatch(path);
+    if (taskAction != null) {
+      final t = tasks.firstWhere((x) => x['id'] == taskAction.group(1));
+      switch (taskAction.group(2)) {
+        case 'approve':
+          if (b()['remember'] == true) grants.add('pc.apps');
+          t['status'] = 'completed';
+          for (final s in t['steps'] as List) {
+            (s as Map)['status'] = 'succeeded';
+          }
+        case 'reject' || 'cancel':
+          t['status'] = 'cancelled';
+        case 'pause':
+          t['status'] = 'paused';
+        case 'resume' || 'retry':
+          t['status'] = 'queued';
+        case 'repeat':
+          return ok({'id': 'sched-1'}, 201);
+      }
+      return ok(t);
+    }
+    final perm = RegExp(r'^/api/v1/permissions/(.+)$').firstMatch(path);
+    if (perm != null && r.method == 'PUT') {
+      final scope = perm.group(1)!;
+      b()['enabled'] == true ? grants.add(scope) : grants.remove(scope);
+      final entry = permissionCatalog.firstWhere((e) => e.$1 == scope);
+      return ok({
+        'scope': scope,
+        'title': entry.$2,
+        'granted': grants.contains(scope),
+        'always_asks': entry.$3,
+        'expires_at': null,
+        'tools': <String>[],
+      });
+    }
+    final memory = RegExp(r'^/api/v1/memories/([^/]+)$').firstMatch(path);
+    if (memory != null && memory.group(1) != 'export') {
+      final m = memories.firstWhere((x) => x['id'] == memory.group(1));
+      if (r.method == 'DELETE') {
+        memories.remove(m);
+        return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+      }
+      final u = b();
+      for (final k in ['content', 'kind', 'pinned', 'is_private']) {
+        if (u.containsKey(k)) m[k] = u[k];
+      }
+      return ok(m);
+    }
+    final reminder = RegExp(r'^/api/v1/reminders/([^/]+)$').firstMatch(path);
+    if (reminder != null && r.method == 'PATCH') {
+      deliveredReminders.add(reminder.group(1)!);
+      dueReminders.removeWhere((x) => x['id'] == reminder.group(1));
+      return ok({'id': reminder.group(1), 'text': '', 'due_at': '2026-11-10T10:00:00Z', 'done': false});
+    }
+    final result = RegExp(r'^/api/v1/agents/steps/([^/]+)/result$').firstMatch(path);
+    if (result != null) {
+      stepResults[result.group(1)!] = b();
+      return ok({'cancel': false});
+    }
+    switch (key) {
+      case 'POST /api/v1/assistant/command':
+        final text = b()['text'] as String;
+        commands.add(text);
+        final reply = commandReply(text);
+        if (reply['task'] != null) tasks.insert(0, reply['task'] as Map<String, dynamic>);
+        return ok(reply);
+      case 'GET /api/v1/tasks':
+        return ok(tasks);
+      case 'GET /api/v1/permissions':
+        return ok([
+          for (final e in permissionCatalog)
+            {
+              'scope': e.$1,
+              'title': e.$2,
+              'granted': grants.contains(e.$1),
+              'always_asks': e.$3,
+              'expires_at': null,
+              'tools': <String>[],
+            },
+        ]);
+      case 'GET /api/v1/automation':
+        return ok(_automation());
+      case 'PUT /api/v1/automation':
+        final u = b();
+        if (u['enabled'] != null) automationEnabled = u['enabled'] as bool;
+        if (u['stopped'] == false) automationStopped = false;
+        return ok(_automation());
+      case 'POST /api/v1/automation/emergency-stop':
+        automationStopped = true;
+        for (final t in tasks) {
+          if (t['status'] != 'completed') t['status'] = 'cancelled';
+        }
+        return ok(_automation());
+      case 'GET /api/v1/activity':
+        return ok(activity);
+      case 'GET /api/v1/memories':
+        final q = r.url.queryParameters['q']?.toLowerCase();
+        return ok([
+          for (final m in memories)
+            if (q == null || (m['content'] as String).toLowerCase().contains(q)) m,
+        ]);
+      case 'POST /api/v1/memories':
+        final u = b();
+        final m = {
+          'id': 'mem-${memories.length + 1}',
+          'content': u['content'],
+          'kind': u['kind'] ?? 'note',
+          'source': 'user',
+          'is_private': u['is_private'] ?? false,
+          'pinned': u['pinned'] ?? false,
+          'last_used_at': null,
+          'created_at': '2026-11-10T10:00:00Z',
+          'updated_at': '2026-11-10T10:00:00Z',
+        };
+        memories.insert(0, m);
+        return ok(m, 201);
+      case 'GET /api/v1/memories/export':
+        return ok({'exported_at': '2026-11-10T10:00:00Z', 'count': memories.length, 'memories': memories});
+      case 'DELETE /api/v1/memories':
+        final n = memories.length;
+        memories.clear();
+        return ok({'deleted': n});
+      case 'GET /api/v1/agents':
+        return ok(agents);
+      case 'POST /api/v1/agents/hello':
+        agentHelloBody = b();
+        return ok({});
+      case 'GET /api/v1/agents/steps/next':
+        if (pendingSteps.isEmpty) return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+        return ok(pendingSteps.removeAt(0));
+      case 'GET /api/v1/reminders':
+        return ok(r.url.queryParameters['due'] == 'true' ? dueReminders : <Object>[]);
+    }
+    return null;
+  }
 
   Future<http.StreamedResponse>? _extras(http.BaseRequest r, String body) {
     final path = r.url.path;
@@ -366,7 +591,7 @@ class FakeBackend {
         return http.StreamedResponse(const Stream.empty(), 204);
     }
     if (!authorized(r)) return json(401, {'detail': 'Not authenticated'});
-    final chat = _chat(r, body) ?? _extras(r, body);
+    final chat = _chat(r, body) ?? _extras(r, body) ?? _more(r, body);
     if (chat != null) return chat;
     switch ('${r.method} $path') {
       case 'GET /api/v1/auth/me':
@@ -388,6 +613,8 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   Map<String, Object> prefs = const {},
   SpeechInput? speechInput,
   SpeechOutput? speechOutput,
+  AssistantPlatform? assistantPlatform,
+  PhonePlatform? phonePlatform,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -409,6 +636,8 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
         httpClientProvider.overrideWithValue(backend.client),
         speechInputProvider.overrideWithValue(speechInput ?? FakeSpeechInput()),
         speechOutputProvider.overrideWithValue(speechOutput ?? FakeSpeechOutput()),
+        assistantPlatformProvider.overrideWithValue(assistantPlatform ?? const NoAssistantPlatform()),
+        phonePlatformProvider.overrideWithValue(phonePlatform ?? const NoPhonePlatform()),
       ],
       child: UltronApp(pages: pages),
     ),

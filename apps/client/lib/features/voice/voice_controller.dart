@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/models.dart';
@@ -67,6 +69,8 @@ class VoiceController extends Notifier<VoiceState> {
   bool? _available;
   int _listenSession = 0;
   int _speakSession = 0;
+  // Set while the assistant screen listens: the words go there, not to chat.
+  Completer<String?>? _capture;
 
   SpeechInput get _input => ref.read(speechInputProvider);
   SpeechOutput get _output => ref.read(speechOutputProvider);
@@ -95,6 +99,34 @@ class VoiceController extends Notifier<VoiceState> {
     }
     if (privateInputBlocked) return _notice(privateVoiceInputBlocked);
     if (ref.read(chatProvider).busy) return _notice('Wait for the reply to finish, or stop it first.');
+    await _startListening();
+  }
+
+  /// Listens once for the assistant screen and returns what was heard (null
+  /// if nothing was heard, it was cancelled, or speech isn't available).
+  Future<String?> capture() async {
+    if (state.listening) return null;
+    final completer = _capture = Completer<String?>();
+    await _startListening();
+    if (!state.listening && !completer.isCompleted) {
+      _capture = null;
+      completer.complete(null);
+    }
+    return completer.future;
+  }
+
+  /// Ends an assistant capture early and uses the words heard so far.
+  Future<void> finishCapture() async {
+    if (state.listening) await _input.stop();
+  }
+
+  void _completeCapture(String? text) {
+    final c = _capture;
+    _capture = null;
+    if (c != null && !c.isCompleted) c.complete(text);
+  }
+
+  Future<void> _startListening() async {
     await stopSpeaking();
     try {
       _available ??= await _input.initialize();
@@ -127,6 +159,7 @@ class VoiceController extends Notifier<VoiceState> {
       _finishListening(session, send: false);
       _notice('Could not start listening.');
     }
+    if (!state.listening) _completeCapture(null);
   }
 
   /// Stops listening and throws away what was heard.
@@ -134,6 +167,7 @@ class VoiceController extends Notifier<VoiceState> {
     if (!state.listening) return;
     _listenSession++;
     state = state.copyWith(listening: false, transcript: '', level: 0);
+    _completeCapture(null);
     await _input.cancel();
   }
 
@@ -142,6 +176,7 @@ class VoiceController extends Notifier<VoiceState> {
     _listenSession++;
     final text = state.transcript.trim();
     state = state.copyWith(listening: false, transcript: '', level: 0);
+    if (_capture != null) return _completeCapture(send && text.isNotEmpty ? text : null);
     if (!send || text.isEmpty) return;
     // The chat may have been switched to private while listening.
     if (privateInputBlocked) return _notice(privateVoiceInputBlocked);

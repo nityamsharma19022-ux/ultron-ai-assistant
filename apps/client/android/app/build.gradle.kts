@@ -47,3 +47,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Notifications and runtime permissions for the phone tools.
+    implementation("androidx.core:core-ktx:1.17.0")
+}

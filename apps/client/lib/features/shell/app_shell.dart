@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/session.dart';
+import '../../core/notices.dart';
+import '../../core/platform/native.dart';
 import '../../core/status/system_status.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/connection_indicator.dart';
 import '../../widgets/ultron_background.dart';
 import '../../widgets/ultron_logo.dart';
+import '../agent/phone_agent.dart';
+import '../assistant/assistant_screen.dart';
 import '../settings/ai_preferences_controller.dart';
 import '../voice/voice_controller.dart';
 import 'sections.dart';
@@ -36,6 +42,17 @@ class AppShell extends ConsumerWidget {
           ..showSnackBar(SnackBar(content: Text(notice)));
       }
     });
+    ref.listen(noticesProvider, (_, notice) {
+      if (notice != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(notice.text)));
+      }
+    });
+    // The phone runs ULTRON's phone steps while the app is open; due
+    // reminders are shown on every device.
+    ref.listen(phoneAgentProvider, (_, _) {});
+    ref.listen(reminderWatcherProvider, (_, _) {});
     final page = AnimatedSwitcher(
       duration: const Duration(milliseconds: 260),
       switchInCurve: Curves.easeOutCubic,
@@ -49,6 +66,7 @@ class AppShell extends ConsumerWidget {
             child: SafeArea(
               child: Column(
                 children: [
+                  const _AssistLauncher(),
                   const _OfflineBanner(),
                   if (!wide) const _TopBar(),
                   Expanded(
@@ -107,6 +125,13 @@ class _Sidebar extends ConsumerWidget {
           for (final s in AppSection.values)
             _NavItem(section: s, selected: s == section, onTap: () => ref.read(sectionProvider.notifier).select(s)),
           const Spacer(),
+          OutlinedButton.icon(
+            key: const Key('open-assistant'),
+            onPressed: () => AssistantScreen.open(context),
+            icon: const Icon(Icons.graphic_eq),
+            label: const Text('Assistant'),
+          ),
+          const SizedBox(height: 16),
           const ConnectionIndicator(),
           const SizedBox(height: 16),
           if (session is SignedIn)
@@ -220,6 +245,55 @@ class _TopBar extends StatelessWidget {
     decoration: BoxDecoration(
       border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12))),
     ),
-    child: const Row(children: [UltronLogo(size: 15), Spacer(), ConnectionIndicator(compact: true)]),
+    child: Row(
+      children: [
+        const UltronLogo(size: 15),
+        const Spacer(),
+        const ConnectionIndicator(compact: true),
+        IconButton(
+          key: const Key('open-assistant'),
+          tooltip: 'Assistant',
+          onPressed: () => AssistantScreen.open(context),
+          icon: const Icon(Icons.graphic_eq),
+        ),
+      ],
+    ),
   );
+}
+
+/// Opens the assistant screen when Android invokes ULTRON as the assistant
+/// (at launch or while the app is running). Draws nothing.
+class _AssistLauncher extends ConsumerStatefulWidget {
+  const _AssistLauncher();
+
+  @override
+  ConsumerState<_AssistLauncher> createState() => _AssistLauncherState();
+}
+
+class _AssistLauncherState extends ConsumerState<_AssistLauncher> {
+  StreamSubscription<void>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    final platform = ref.read(assistantPlatformProvider);
+    if (!platform.supported) return;
+    _sub = platform.assistRequests.listen((_) => _open());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (await platform.takeLaunchAssist()) _open();
+    });
+  }
+
+  void _open() {
+    if (mounted) AssistantScreen.open(context);
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

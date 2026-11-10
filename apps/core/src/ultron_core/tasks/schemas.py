@@ -42,6 +42,8 @@ class CommandIn(_Strict):
 
     text: str = Field(min_length=1, max_length=4000)
     timezone: str | None = Field(default=None, max_length=64)
+    # Used when the device can't name its time zone (minutes east of UTC).
+    utc_offset_minutes: int | None = Field(default=None, ge=-14 * 60, le=14 * 60)
     private: bool = False
     source: Literal["text", "voice", "assistant"] = "text"
     # Wait (up to the server limit) for the task to finish, for voice replies.

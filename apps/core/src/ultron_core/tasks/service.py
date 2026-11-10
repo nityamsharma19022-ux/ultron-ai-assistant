@@ -17,7 +17,10 @@ PLATFORM_TARGET = {"windows": "windows", "android": "android"}
 
 
 async def plan_context(
-    session: AsyncSession, principal: Principal, timezone: str | None
+    session: AsyncSession,
+    principal: Principal,
+    timezone: str | None,
+    utc_offset_minutes: int | None = None,
 ) -> PlanContext:
     agents = await session.scalars(select(AgentInfo).where(AgentInfo.user_id == principal.user.id))
     targets = {"core"}
@@ -35,7 +38,7 @@ async def plan_context(
         capabilities=capabilities,
         device_tools=device_tools,
         origin=PLATFORM_TARGET.get(principal.device.platform),
-        tz=zone(timezone),
+        tz=zone(timezone, utc_offset_minutes),
     )
 
 

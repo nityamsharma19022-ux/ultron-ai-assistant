@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_label">ULTRON</string>
+    <string name="recognition_label">ULTRON speech (uses your phone\'s speech service)</string>
+    <string name="notification_channel_name">ULTRON</string>
+    <string name="notification_channel_description">Reminders and task updates from ULTRON</string>
+</resources>

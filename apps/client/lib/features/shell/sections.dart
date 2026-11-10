@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum AppSection {
   chat('Chat', Icons.forum_outlined, Icons.forum),
+  tasks('Tasks', Icons.bolt_outlined, Icons.bolt),
+  memory('Memory', Icons.psychology_outlined, Icons.psychology),
   dashboard('System', Icons.monitor_heart_outlined, Icons.monitor_heart),
   settings('Settings', Icons.tune_outlined, Icons.tune);
 

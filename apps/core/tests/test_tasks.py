@@ -133,6 +133,19 @@ def test_rules() -> None:
     assert planner.rule_plan("pc status", limited).steps[0].tool == "pc.status"
 
 
+def test_time_zone_fallbacks() -> None:
+    assert planner.zone("Asia/Kolkata").key == "Asia/Kolkata"
+    ist = planner.zone(None, 330)
+    assert ist.utcoffset(None) == timedelta(hours=5, minutes=30)
+    assert planner.zone("Not/AZone", 60).utcoffset(None) == timedelta(hours=1)
+    assert planner.zone_name(planner.zone(None)) == "UTC"
+    c = ctx(now=datetime(2026, 11, 10, 15, 0, tzinfo=UTC), tz=ist)
+    due = datetime.fromisoformat(
+        planner.rule_plan("remind me to sleep at 11 pm", c).steps[0].args["due_at"]
+    )
+    assert due.utcoffset() == timedelta(hours=5, minutes=30) and due.hour == 23
+
+
 def test_plan_validation() -> None:
     assert planner.parse_plan_json('<think>x</think>```json\n{"steps": []}\n```') == {"steps": []}
     with pytest.raises(planner.PlanError):
@@ -569,3 +582,27 @@ async def test_task_validation(migrated_database) -> None:  # type: ignore[no-un
         assert (
             await client.post("/api/v1/assistant/command", json={"text": "hi"})
         ).status_code == 401
+
+
+async def test_long_poll_waits_then_returns_no_work(migrated_database) -> None:  # type: ignore[no-untyped-def]
+    """Real agents poll with wait > 0; with no work the server must keep
+    looping and answer 204 (regression: it failed with 500 on the 2nd round)."""
+    async with engine_app(migrated_database) as (app, client):
+        await owner_headers(app, client)
+        agent = await pc_agent(client)
+        resp = await client.get("/api/v1/agents/steps/next?wait=2", headers=agent)
+        assert resp.status_code == 204, resp.text
+        # Work that arrives during the wait is handed out.
+        h = bearer((await login(client)).json()["access_token"])
+        await grant(client, h, "pc.apps")
+        out = await command(client, h, "open notepad")
+
+        async def later() -> None:
+            await asyncio.sleep(0.5)
+            await drive(app)
+
+        waiter = asyncio.create_task(later())
+        resp = await client.get("/api/v1/agents/steps/next?wait=5", headers=agent)
+        await waiter
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["task_id"] == out["task"]["id"]

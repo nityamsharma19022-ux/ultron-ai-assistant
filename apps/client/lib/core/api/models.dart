@@ -226,11 +226,13 @@ class AiPreferences {
     required this.cloudOrder,
     required this.privateByDefault,
     required this.availableCloudProviders,
+    this.memoryEnabled = true,
   });
   factory AiPreferences.fromJson(Map<String, dynamic> j) => AiPreferences(
     mode: j['mode'] as String? ?? 'auto',
     cloudOrder: [for (final n in (j['cloud_order'] as List? ?? const [])) n as String],
     privateByDefault: j['private_by_default'] as bool? ?? false,
+    memoryEnabled: j['memory_enabled'] as bool? ?? true,
     availableCloudProviders: [for (final n in (j['available_cloud_providers'] as List? ?? const [])) n as String],
   );
   final String mode;
@@ -238,14 +240,24 @@ class AiPreferences {
   final bool privateByDefault;
   final List<String> availableCloudProviders;
 
-  Map<String, dynamic> toJson() => {'mode': mode, 'cloud_order': cloudOrder, 'private_by_default': privateByDefault};
+  /// Saved memories are given to the AI in chat.
+  final bool memoryEnabled;
 
-  AiPreferences copyWith({String? mode, List<String>? cloudOrder, bool? privateByDefault}) => AiPreferences(
-    mode: mode ?? this.mode,
-    cloudOrder: cloudOrder ?? this.cloudOrder,
-    privateByDefault: privateByDefault ?? this.privateByDefault,
-    availableCloudProviders: availableCloudProviders,
-  );
+  Map<String, dynamic> toJson() => {
+    'mode': mode,
+    'cloud_order': cloudOrder,
+    'private_by_default': privateByDefault,
+    'memory_enabled': memoryEnabled,
+  };
+
+  AiPreferences copyWith({String? mode, List<String>? cloudOrder, bool? privateByDefault, bool? memoryEnabled}) =>
+      AiPreferences(
+        mode: mode ?? this.mode,
+        cloudOrder: cloudOrder ?? this.cloudOrder,
+        privateByDefault: privateByDefault ?? this.privateByDefault,
+        memoryEnabled: memoryEnabled ?? this.memoryEnabled,
+        availableCloudProviders: availableCloudProviders,
+      );
 }
 
 class HealthLive {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ULTRON as the system digital assistant (chosen by the user in
+     Settings > Apps > Default apps > Digital assistant app). -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="dev.ultron.ultron_app.UltronSessionService"
+    android:recognitionService="dev.ultron.ultron_app.UltronRecognitionService"
+    android:settingsActivity="dev.ultron.ultron_app.MainActivity"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true"
+    android:supportsLocalInteraction="false" />

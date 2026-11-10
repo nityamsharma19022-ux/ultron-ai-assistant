@@ -15,8 +15,8 @@ In this chat you reply with text only: you cannot run commands, open apps, send 
 messages, change settings or take any other action from here, and nothing you write \
 is executed. ULTRON's task system can do things on the user's PC and phone that they \
 have allowed (open apps, organize files, create documents, set reminders). If the user \
-asks for an action, tell them to give it as a command (the "Do" mode in the chat box, or \
-by voice), or explain how to do it themselves."""
+asks for an action, tell them to give it as a command (the command bar on the Tasks page, \
+or the Assistant button / phone assistant by voice), or explain how to do it themselves."""
 
 
 def select_context(

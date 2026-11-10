@@ -2,8 +2,11 @@
     <!-- Talk to ULTRON Core (debug builds get this automatically; release
          builds need it here). -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Voice input (push-to-talk). -->
+    <!-- Voice input (push-to-talk and the assistant screen). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Phone tools: alarms/timers through the clock app, notifications. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="ULTRON"
         android:usesCleartextTraffic="true"
@@ -30,7 +33,42 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Opened as the assistant (from ULTRON's assistant session,
+                 the system assist action, or a headset voice command). -->
+            <intent-filter>
+                <action android:name="dev.ultron.ultron_app.ASSIST"/>
+                <action android:name="android.intent.action.ASSIST"/>
+                <action android:name="android.intent.action.VOICE_COMMAND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
+        <!-- ULTRON as the phone's digital assistant (the user chooses it in
+             system settings). Only the system can bind to these. -->
+        <service
+            android:name=".UltronVoiceInteractionService"
+            android:label="@string/assistant_label"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/ultron_voice_interaction"/>
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService"/>
+            </intent-filter>
+        </service>
+        <service
+            android:name=".UltronSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true"/>
+        <service
+            android:name=".UltronRecognitionService"
+            android:label="@string/recognition_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -46,6 +84,18 @@
          Windows PC over the LAN is plain HTTP until TLS pairing (Phase 3b,
          see docs/SECURITY.md). -->
     <queries>
+        <!-- Apps ULTRON can open (phone.apps.open). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+        <!-- Clock app for alarms and timers. -->
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER"/>
+        </intent>
         <!-- Speech recognition and text-to-speech services. -->
         <intent>
             <action android:name="android.speech.RecognitionService"/>
