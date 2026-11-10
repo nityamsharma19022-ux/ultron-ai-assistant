@@ -20,6 +20,26 @@ They differ only in the model and answer length they ask for. The
 stand-in gateway confirmed Instant → `auto:fast`, Balanced → `auto`,
 Deep → `auto:smart` (15 requests each).
 
+## Speech-to-text (Phase 1)
+faster-whisper on the CPU (int8, sandbox: 4 cores), 4.1 s English
+command "Open Notepad and remind me to call mom at 9 PM" (synthetic
+voice):
+
+| Model | Time to text | Result |
+|---|---|---|
+| base | 1.1 s | "…call Mama to IMPM" (wrong) |
+| small (chosen) | 2.2 s | "Open Notepad and remind me to call mom at 9pm." (correct) |
+
+- Loading `small` takes about 7 s once (first time: plus the ~500 MB
+  download). **Prepare voice** in Settings does this ahead of time.
+- Hindi needs the language hint (the app sends your voice language):
+  without it, Whisper mis-detected the synthetic Hindi voice.
+- Silence is detected in the app and never sent; the app also stops
+  recording 1.2 s after you stop talking, so a short command needs no
+  button press.
+- Your PC's speed will differ: Settings → Voice shows the engine, and
+  Core logs each transcription's time (never the words).
+
 ## Other requests (30 runs each)
 | Request | Median | Max |
 |---|---|---|

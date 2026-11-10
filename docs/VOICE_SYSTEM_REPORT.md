@@ -3,10 +3,20 @@
 _Last updated: 2026-11-10._ Nothing here has been tested with a real
 microphone or speaker on your devices yet.
 
+## Phase 1 (2026-11-10): Windows voice fixed
+- **Root cause:** the Windows `speech_to_text` plugin never reports a
+  final result or "done" (and has no en-IN or Hindi), so the mic stayed on
+  "listening".
+- **Now (Windows):** the app records 16 kHz audio; ULTRON Core transcribes it
+  with faster-whisper `small` (on your PC, English + Hindi). Recording stops
+  1.2 s after you stop talking (or when you tap the mic, or at 30 s).
+- **Everywhere:** a 75 s watchdog ends listening; instant listening state
+  and sound; replies are spoken sentence by sentence as they stream.
+
 ## What exists
 | Feature | Windows | Android | Status |
 |---|---|---|---|
-| Push-to-talk (mic button in chat, command bar, assistant screen) | ✓ Windows speech recognition | ✓ phone recognizer | Built, widget-tested with fake engines |
+| Push-to-talk (mic button in chat, command bar, assistant screen) | ✓ recorded in the app, transcribed by Core (Whisper) | ✓ phone recognizer | Built, widget-tested with fake engines |
 | Live transcript, mic level drives the visualizer | ✓ | ✓ | Built |
 | Read replies aloud (TTS), speed setting, voice language | ✓ | ✓ | Built |
 | Stop / interrupt reading by starting to talk | ✓ | ✓ | Built and tested |

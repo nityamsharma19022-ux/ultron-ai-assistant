@@ -3,6 +3,25 @@
 All notable changes to ULTRON. Dates are when the work was committed to
 `claude/fervent-lovelace-fqank5`.
 
+## [Unreleased] — 2026-11-10 (Phase 1: voice)
+
+### Fixed
+- **Windows voice got stuck on "listening".** Root cause: the
+  `speech_to_text` plugin's Windows recogniser (old Windows Speech/SAPI)
+  never reports a final result or "done" and doesn't support English
+  (India) or Hindi, and ULTRON had no time limit. Windows now records audio
+  in the app and ULTRON Core transcribes it; a watchdog ends listening in
+  every case.
+
+### Added
+- `POST /api/v1/voice/transcribe`, `/voice/status`, `/voice/warmup`:
+  faster-whisper `small` on the CPU (English + Hindi), audio never
+  stored. Model cached in the `ultron_models` Docker volume.
+- Settings → Voice: speech engine status and **Prepare voice**.
+- Push-to-talk feedback: listening state and a sound immediately;
+  "Transcribing…"; haptic tick on Android.
+- Replies are read aloud **sentence by sentence while they stream**.
+
 ## [Unreleased] — 2026-11-10 (ULTRON 2.0, part 1)
 
 ### Added

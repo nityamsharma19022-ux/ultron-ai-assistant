@@ -77,6 +77,16 @@ _Last updated: 2026-11-10._
 | Battery/network metrics every minute | IMPLEMENTED | App test |
 | Wake word | BLOCKED | Android reserves always-on hotword detection for system apps |
 
+## Voice
+| Feature | Status | Evidence / notes |
+|---|---|---|
+| Windows voice input: app records, Core transcribes (faster-whisper `small`, CPU, English + Hindi) | IMPLEMENTED (sandbox: real Whisper) / TESTING (your PC) | Real model heard "Open Notepad and remind me to call mom at 9pm" in 2.2 s (4.1 s audio); app tests with a fake recorder |
+| Listening can never get stuck (auto-stop after a pause, 30 s limit, 75 s watchdog) | IMPLEMENTED | Tests incl. a recogniser that never reports back |
+| Instant push-to-talk feedback (listening state + sound; Android haptic) | IMPLEMENTED | Tests; sound not verifiable here |
+| Read replies aloud sentence by sentence while streaming | IMPLEMENTED | Tests (English, Hindi danda, code blocks, stop) |
+| Android voice input (phone recogniser) | TESTING | Unchanged; phone test pending |
+| Wake word | NOT STARTED | Phase 5 (openWakeWord, off by default) |
+
 ## Interface
 | Feature | Status | Evidence / notes |
 |---|---|---|
