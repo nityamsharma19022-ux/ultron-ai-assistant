@@ -1,6 +1,6 @@
 # ULTRON — Project status
 
-_Last updated: 2026-11-09_
+_Last updated: 2026-11-10_
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -9,11 +9,77 @@ _Last updated: 2026-11-09_
 | 2 | Intelligence Engine: AI provider router + chat API | ✅ Done (CI green) |
 | 2.1 | Real Ollama integration (Windows, `qwen3.5:4b`) | 🟡 Built; real-model run pending on your PC |
 | 2.2 | Local AI integration: loading states, warm-up, time limit, local-only guard | 🟡 **Built and tested in sandbox; real-model run pending on your PC** |
-| 3 | Flutter app (Android + Windows), pairing, offline cache/outbox, sync | ⏸ Not started (needs approval) |
+| 3 | Flutter app (Windows + Android): premium interface, chat, visualizer, dashboard, settings, voice | 🟡 **Built and tested in sandbox (web preview); Windows/Android builds pending on your PC** |
+| 3b | Offline cache/outbox, sync endpoints, secure phone pairing (TLS) | ⏸ Deferred (approved plan) |
 | 4 | Memory (pgvector), voice, reminders | — |
 | 5 | Optional ULTRON-only Supabase project, cloud hosting (not Netlify), edge role | — |
 
 Full plan: [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
+
+---
+
+## Phase 3 — Premium interface (2026-11-10)
+
+Flutter app in `apps/client` (Flutter 3.47.9, Dart 3.13.7, Riverpod 3).
+Built in five increments, each tested before the next. **The backend was
+not changed** (no files under `apps/core` touched).
+
+| Increment | What it does | Commit (local) |
+|---|---|---|
+| 3.1 Foundation | Dark futuristic theme (Orbitron + Inter, 5 accents), API client with token refresh, secure token storage, sign-in with connection test, responsive shell (sidebar ≥ 900 px, top bar + bottom nav on phones), cloud/local connection indicator, offline banner | `8745dcc` |
+| 3.2 Chat | Streamed replies (SSE) with stage text, stop, retry, CLOUD/LOCAL badge with fallback note, conversation list, private conversations, copy | `ca24843` |
+| 3.3 Visualizer | Animated core (rings, particles, reactive bars) with modes idle / listening / thinking / loading model / generating / speaking / offline; colours by AI source; Full / Reduced / Off motion | `a0e0940` |
+| 3.4 Dashboard + settings | System status (Core, DB, Redis, AI sources, local model with warm-up, devices with sign-out); settings for AI routing (saved on Core), accent, motion, voice, account, licences | `13a24fe` |
+| 3.5 Voice | Push-to-talk with live transcript, read-aloud, mic level → visualizer, privacy rules (below) | `bab902c` |
+
+### Test results (this sandbox, 2026-11-10)
+- **Flutter:** `flutter analyze` → no issues; `flutter test` → **74 passed**
+  (fake ULTRON Core and fake speech engines; no network).
+- **Backend:** `uv run pytest` → **162 passed, 11 skipped** (the skipped
+  ones are the live-Ollama tests); ruff check and format clean.
+- **Browser check against the real backend** (web build of the app, Docker
+  stack with the dev mock cloud provider): sign-in, chat streaming with
+  stages, visualizer, dashboard, settings and the voice controls all work
+  on desktop (1280–1600 px) and phone (412 px) sizes. Headless Chromium
+  even started real listening. Screenshots were sent with the report.
+- Local AI showed "unavailable" in the sandbox because there is no Ollama
+  here; that is expected.
+
+### Voice and privacy
+- Windows: speech recognition is Windows Speech (SAPI) on the PC; allowed
+  in private conversations.
+- Android: the recogniser may use an online service (the plugin's
+  "on-device" option silently falls back), so **voice input is off in
+  private conversations** there, with an explanation.
+- Read-aloud in private conversations uses only offline voices (Android
+  voices report whether they need the network); otherwise the app says the
+  reply wasn't read.
+
+### Bugs found and fixed during Phase 3
+- Release Android builds were missing the INTERNET permission (debug
+  builds hide this) and blocked plain HTTP to ULTRON Core. Fixed in the
+  manifest; also added microphone permission and the app name "ULTRON".
+- Panels drew without their dark fill (a gradient replaced the colour) and
+  hid ink ripples; fixed in `GlassPanel`.
+- `Stream.timeout` never finished under the test clock; replaced by a small
+  idle-timeout helper with its own tests.
+- A failed reply lost its error text, and new conversations kept the title
+  "New conversation"; both fixed.
+
+### Not verified here (needs your PC)
+- `flutter run -d windows` / `flutter build windows` (needs Visual Studio's
+  C++ workload; the sandbox is Linux).
+- `flutter build apk` and a run on your phone (no Android SDK here).
+- Real microphone and speaker use on Windows and Android.
+- The new **App CI** workflow (`.github/workflows/client-ci.yml`) runs only
+  after a push.
+
+Steps: [apps/client/README.md](apps/client/README.md).
+
+### Remaining (Phase 3b, deferred as agreed)
+- Offline cache (SQLite) and outbox, sync endpoints on Core.
+- Secure phone pairing with TLS certificate pinning (replaces plain HTTP
+  on the LAN).
 
 ---
 
@@ -259,5 +325,6 @@ No Supabase project created; no Netlify use; no access to other projects'
 resources. All new settings are `ULTRON_`-prefixed.
 
 ## Next step
-Phase 3 (Flutter app + sync) starts only after Phase 2 is reviewed and
-approved.
+Review Phase 3 (screenshots and the Windows/Android steps in
+`apps/client/README.md`), approve pushing the local commits, then decide on
+Phase 3b.

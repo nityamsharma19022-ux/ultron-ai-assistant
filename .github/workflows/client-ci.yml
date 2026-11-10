@@ -1,0 +1,50 @@
+name: ULTRON App CI
+
+on:
+  push:
+    paths:
+      - "apps/client/**"
+      - ".github/workflows/client-ci.yml"
+  pull_request:
+    paths:
+      - "apps/client/**"
+      - ".github/workflows/client-ci.yml"
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.47.9"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/client
+    steps:
+      - uses: actions/checkout@v7
+
+      # Official Flutter SDK, pinned to the version the app is developed with.
+      - name: Install Flutter
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git flutter
+          echo "${{ runner.temp }}/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Get packages
+        run: |
+          flutter --disable-analytics
+          flutter pub get
+
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      # Widget and unit tests use a fake backend and fake speech engines;
+      # no network, no real AI calls.
+      - name: Test
+        run: flutter test

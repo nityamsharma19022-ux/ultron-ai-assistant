@@ -2,8 +2,10 @@
 
 Advanced personal AI assistant for **Android** and **Windows**.
 
-> **Status:** Phase 2 complete — backend with cloud-first / local-fallback
-> AI chat. See [PROJECT_STATUS.md](PROJECT_STATUS.md) and the
+> **Status:** Phase 3 built — the ULTRON app for Windows and Android
+> (chat, AI visualizer, dashboard, settings, voice) on top of the
+> cloud-first / local-fallback backend. See
+> [PROJECT_STATUS.md](PROJECT_STATUS.md) and the
 > [roadmap](docs/DEVELOPMENT_ROADMAP.md).
 
 ## Principles
@@ -25,7 +27,8 @@ cp .env.example .env    # then set your own passwords and JWT secret
 docker compose up -d --build
 curl http://localhost:8000/health/ready
 ```
-Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The app:
+[apps/client/README.md](apps/client/README.md).
 
 ## Documentation
 - [Architecture](docs/ARCHITECTURE.md)

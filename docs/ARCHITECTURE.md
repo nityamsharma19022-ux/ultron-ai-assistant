@@ -76,10 +76,13 @@ flowchart LR
 
 ### 3.1 ULTRON App (client)
 - **One codebase for Android and Windows** using Flutter.
-- Chat UI, voice input/output, notifications, settings.
-- **Local SQLite cache** (via `drift`) holds recent conversations, settings
-  and an **outbox** of actions taken while offline, synced when back online.
-- Talks to ULTRON Core over HTTPS (REST) and WebSocket (streamed replies).
+- Chat UI, animated visualizer, system dashboard, settings, voice input and
+  output (built in Phase 3; see [apps/client](../apps/client/README.md)).
+- **Local SQLite cache** (via `drift`) will hold recent conversations,
+  settings and an **outbox** of actions taken while offline, synced when back
+  online (Phase 3b).
+- Talks only to ULTRON Core: REST for everything, Server-Sent Events for
+  streamed replies. Never to AI providers or Ollama directly.
 
 ### 3.2 ULTRON Core (backend)
 Python 3.12 + FastAPI, one deployable service plus a worker process.
@@ -221,7 +224,7 @@ outboxes, synced with idempotent operations when connectivity returns
   ([ADR-0006](adr/0006-authentication.md)).
 - Login rate limiting in Redis.
 - Local services bind to `127.0.0.1` only; LAN exposure for the Android
-  app will be designed explicitly in Phase 3.
+  app is an explicit opt-in (plain HTTP for now); TLS pairing is Phase 3b.
 - Private-mode requests never reach cloud providers.
 - Row-level security policies added if/when Supabase is connected.
 
@@ -251,7 +254,7 @@ ultron-ai-assistant/
 │   │   ├── src/ultron_core/  # app, config, auth, db, migrations
 │   │   ├── tests/            # unit + integration tests
 │   │   └── Dockerfile
-│   └── client/               # ULTRON App (Flutter: Android + Windows) [Phase 3]
+│   └── client/               # ULTRON App (Flutter: Android + Windows)
 ├── infra/postgres/init/      # Local DB bootstrap (extensions only)
 ├── docs/                     # Architecture, sync design, ADRs, setup
 ├── .github/workflows/        # CI (lint, tests, image build)
@@ -267,7 +270,8 @@ ultron-ai-assistant/
 | 0 | Foundation: docs, Docker Compose (Postgres + Redis), env template, repo hygiene | **Done** |
 | 1 | ULTRON Core: config, health, Postgres, Redis, migrations, auth, logging, tests, CI, Docker | **Done** |
 | 2 | AI provider router (cloud free tier → Ollama fallback) + chat API with streaming | **Done** |
-| 3 | Flutter app (Windows + Android): chat UI, device pairing, backend selection, offline cache/outbox, sync endpoints | Awaiting approval |
+| 3 | Flutter app (Windows + Android): chat UI, visualizer, dashboard, settings, voice | **Built** (device builds pending) |
+| 3b | Device pairing (TLS), backend selection, offline cache/outbox, sync endpoints | Deferred |
 | 4 | Long-term memory (pgvector), voice (STT/TTS), reminders/workers | — |
 | 5 | Optional: connect a new ULTRON Supabase project; choose cloud hosting (not Netlify) | — |
 

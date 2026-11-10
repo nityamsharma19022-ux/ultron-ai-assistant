@@ -31,10 +31,16 @@ structured logging, tests, CI, Docker image.
   cancellation, rate limits, validation.
 - `docs/SECURITY.md`, ADR-0007.
 
-## Phase 3 — ULTRON App + sync (proposed)
-- Flutter app for Windows and Android: login/pairing, conversation list,
-  streaming chat UI with cloud/local badge, private toggle, AI status and
-  preferences screens, cancel button.
+## Phase 3 — ULTRON App (premium interface) ✅ built, device builds pending
+- Flutter app for Windows and Android ([apps/client](../apps/client/README.md)):
+  sign-in, conversation list, streaming chat with stages and cloud/local
+  badge, private toggle, stop/retry; animated AI visualizer; system
+  dashboard (status, local model warm-up, devices); settings (AI routing,
+  appearance, voice, account).
+- Voice with the platform's own engines: push-to-talk and read-aloud, with
+  privacy rules for private conversations ([SECURITY.md](SECURITY.md)).
+
+## Phase 3b — Offline and pairing (deferred)
 - Backend selection on Android: cloud → Windows local backend → offline
   ([SYNC.md](SYNC.md)); pairing with TLS certificate pinning for LAN.
 - Offline mode: SQLite cache (drift) + outbox; "ask later" queue.
@@ -46,8 +52,9 @@ structured logging, tests, CI, Docker image.
 ## Phase 4 — Memory, voice, reminders
 - Long-term memory with pgvector embeddings (local embedding model by
   default; private data embedded locally only).
-- Voice: faster-whisper speech-to-text, Piper text-to-speech, platform TTS
-  fallback.
+- Voice upgrade: faster-whisper speech-to-text and Piper text-to-speech on
+  the Windows backend (local, so Android private chats can use voice too).
+  Phase 3 already has push-to-talk and read-aloud with platform engines.
 - Reminders and background jobs (Redis queue), delivered to devices.
 - Action framework design (allow-listed, user-confirmed) with its own
   security review. No AI-triggered actions before this.

@@ -151,8 +151,9 @@ the same Wi-Fi:
 1. Set `ULTRON_CORE_BIND_HOST=0.0.0.0` in `.env` and run
    `docker compose up -d`.
 2. Allow inbound TCP 8000 for **private** networks only in Windows Firewall.
-3. Use `http://<your-PC-LAN-IP>:8000` in the app (Phase 3 adds pairing with
-   certificate pinning).
+3. On the app's sign-in screen, enter `http://<your-PC-LAN-IP>:8000` and
+   use "Test connection" (Phase 3b adds pairing with certificate pinning).
+   Build and install steps: [apps/client/README.md](../apps/client/README.md).
 
 PostgreSQL and Redis always stay on `127.0.0.1`.
 

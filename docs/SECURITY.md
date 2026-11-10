@@ -1,7 +1,7 @@
 # ULTRON security
 
 How ULTRON protects credentials, conversations and devices. Covers what is
-built today (Phases 1–2) and the rules later phases must follow.
+built today (Phases 1–3) and the rules later phases must follow.
 
 ## 1. Threat model (personal assistant)
 
@@ -63,6 +63,24 @@ Users can make every new conversation private by default
 - Apps never talk to Ollama; they only talk to ULTRON Core. Ollama stays on
   its default `127.0.0.1:11434`; never set `OLLAMA_HOST=0.0.0.0`.
 
+## 3b. Voice in private conversations
+
+The app uses the device's own speech engines; ULTRON Core never receives
+audio.
+
+- **Voice input** in a private conversation is allowed only where speech
+  recognition is known to run on the device: Windows Speech (SAPI
+  dictation) on Windows. On Android the system recogniser usually uses
+  Google's online service, and the plugin's "on-device" option falls back
+  to it silently, so voice input is **off** in private conversations there
+  (the mic explains why). If a chat is switched to private while listening,
+  the words are discarded, not sent.
+- **Read-aloud** of a private reply uses only an offline voice (Android
+  voices report whether they need the network; Windows voices are local).
+  If there is none, the reply is not read and the app says so.
+- Standard conversations may use the platform's online recogniser; the
+  Settings → Voice page says which applies on the device.
+
 ## 4. AI output is never executed
 
 - Providers receive text and return text. ULTRON never sends tool or
@@ -115,14 +133,19 @@ tokens with family revocation on reuse, instant device revocation.
 - PostgreSQL and Redis bind to `127.0.0.1` only.
 - The API binds to `127.0.0.1` by default; LAN access for the Android app is
   an explicit opt-in (`ULTRON_CORE_BIND_HOST`), and pairing with TLS
-  certificate pinning is planned for Phase 3.
+  certificate pinning is planned for Phase 3b.
+- The Android app allows plain HTTP (`usesCleartextTraffic`) so it can reach
+  ULTRON Core on the emulator host or the PC's LAN address until pairing.
+- The app stores login tokens in the OS secret store (Windows Credential
+  Manager, Android Keystore); only non-secret preferences go in ordinary
+  app storage.
 - The Docker image runs as a non-root user.
 
 ## 9. Known gaps (tracked)
 
 | Gap | Plan |
 |---|---|
-| LAN traffic between Android and the Windows backend is plain HTTP when enabled | Phase 3: TLS + certificate pinning at pairing |
+| LAN traffic between Android and the Windows backend is plain HTTP when enabled | Phase 3b: TLS + certificate pinning at pairing |
 | Cancellation and the "one reply at a time" lock work within one server process | Fine for the local backend (single process); use Redis for multi-process cloud hosting (Phase 5) |
 | No audit of prompt-injection content inside conversations | Low risk while AI output can't trigger actions; revisit with the action framework |
 | `.env` holds secrets in plain text on the PC | Acceptable for a personal machine; an OS secret store can be evaluated later |

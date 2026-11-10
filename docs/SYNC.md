@@ -2,7 +2,7 @@
 
 > **Status:** Design approved in principle for Phase 1. Foundations are
 > built (see "What exists today"); the sync endpoints and client outbox are
-> implemented in Phase 3, and the cloud/edge split in Phase 5.
+> implemented in Phase 3b, and the cloud/edge split in Phase 5.
 
 ## 1. Goals
 
@@ -55,7 +55,7 @@ flowchart TD
   against one node from start to finish.
 - **Pairing is per node:** a device pairs (logs in) with each backend
   separately, so tokens from one node are never valid on another.
-- **LAN security (Phase 3):** the Windows backend is reachable from the
+- **LAN security (Phase 3b):** the Windows backend is reachable from the
   phone only when the owner sets `ULTRON_CORE_BIND_HOST`; pairing will pin
   the backend's TLS certificate fingerprint (shown as a QR code).
 
@@ -173,4 +173,4 @@ Done once, when a cloud ULTRON project exists (Phase 5):
 - Cloud migration safety catch.
 
 Still to build: the outbox and change feed (`sync_applied_ops`,
-`change_seq`, `/sync` endpoints) in Phase 3; the edge role in Phase 5.
+`change_seq`, `/sync` endpoints) in Phase 3b; the edge role in Phase 5.
