@@ -103,6 +103,13 @@ async def _issue_tokens(
     )
 
 
+async def issue_tokens(
+    session: AsyncSession, settings: Settings, user: User, device: Device
+) -> TokenPair:
+    """A new token family for a device that was just paired (caller commits)."""
+    return await _issue_tokens(session, settings, user, device, family_id=uuid.uuid4())
+
+
 async def login(
     session: AsyncSession,
     settings: Settings,

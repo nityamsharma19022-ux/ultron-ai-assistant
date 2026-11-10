@@ -15,6 +15,15 @@ from ultron_agent.tools.base import Cancelled, ToolContext, ToolError
 
 log = logging.getLogger("ultron.agent")
 MAX_RESULT_CHARS = 200_000
+CERT_HINT = (
+    "ULTRON Core's HTTPS certificate isn't trusted. Set [server] ca_file to Core's cert.pem "
+    "(from `ultron-core tls-init`) in agent.toml."
+)
+
+
+def is_certificate_error(exc: BaseException) -> bool:
+    text = str(exc)
+    return "CERTIFICATE_VERIFY_FAILED" in text or "certificate verify failed" in text
 
 
 def capabilities(config: AgentConfig) -> dict[str, list[str]]:
@@ -86,7 +95,12 @@ def run(config: AgentConfig, client: CoreClient, *, once: bool = False) -> None:
         except AuthError:
             raise
         except (httpx.HTTPError, OSError) as exc:
-            log.warning("connection problem (%s); retrying in %.0fs", type(exc).__name__, backoff)
+            if is_certificate_error(exc):
+                log.error(CERT_HINT)
+            else:
+                log.warning(
+                    "connection problem (%s); retrying in %.0fs", type(exc).__name__, backoff
+                )
             if once:
                 raise
             time.sleep(backoff)

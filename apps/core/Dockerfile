@@ -29,7 +29,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 USER ultron
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).status == 200 else 1)"
+  CMD ["ultron-core", "healthcheck"]
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["ultron-core", "serve", "--host", "0.0.0.0", "--port", "8000"]

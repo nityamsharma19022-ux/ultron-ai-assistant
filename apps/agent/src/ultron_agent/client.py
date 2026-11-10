@@ -62,6 +62,16 @@ class CoreClient:
             ),
         )
 
+    def pair(self, code: str, device_name: str) -> None:
+        """Signs in with a one-time pairing code (no password)."""
+        resp = self.http.post(
+            "/api/v1/pairing/redeem",
+            json={"code": code, "device_name": device_name, "platform": "windows"},
+        )
+        if resp.status_code != 200:
+            raise AuthError(_detail(resp))
+        self._store(resp.json())
+
     def refresh(self) -> None:
         creds = credentials.load(self.data_dir)
         if creds is None:

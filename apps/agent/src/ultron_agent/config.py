@@ -47,6 +47,9 @@ class AgentConfig:
     apps: dict[str, AppEntry]
     workflows: dict[str, Workflow]
     poll_wait_seconds: int = 20
+    # Core's own certificate (cert.pem from `ultron-core tls-init`) when it
+    # uses HTTPS; None uses the system's trusted certificates.
+    ca_file: Path | None = None
     max_read_bytes: int = 20 * 1024 * 1024
     disabled_tools: set[str] = field(default_factory=set)
 
@@ -90,6 +93,11 @@ def load(path: Path | None = None) -> AgentConfig:
     url = str(server.get("url", "")).rstrip("/")
     if not url.startswith(("http://", "https://")):
         raise ConfigError("[server] url must start with http:// or https://")
+    ca_file = None
+    if server.get("ca_file"):
+        ca_file = Path(os.path.expandvars(os.path.expanduser(str(server["ca_file"]))))
+        if not ca_file.is_file():
+            raise ConfigError(f"[server] ca_file not found: {ca_file}")
 
     roots: dict[str, Path] = {}
     for name, value in data.get("roots", {}).items():
@@ -139,4 +147,5 @@ def load(path: Path | None = None) -> AgentConfig:
         workflows=workflows,
         poll_wait_seconds=int(agent.get("poll_wait_seconds", 20)),
         disabled_tools=set(agent.get("disabled_tools", [])),
+        ca_file=ca_file,
     )

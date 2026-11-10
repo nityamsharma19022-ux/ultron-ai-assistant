@@ -21,7 +21,7 @@ Ollama.
 | 4 | Windows desktop agent | ✅ Built; E2E verified on Linux; Windows run pending |
 | 5 | Android system assistant | ✅ Built, APK compiles; phone test pending |
 | 6 | Files and multimodal | ✅ Documents (PDF, DOCX, XLSX, text); images/audio not yet |
-| 7 | Pairing and secure transport | ⏳ |
+| 7 | Pairing and secure transport | ✅ Pairing codes + HTTPS with pinned certificate |
 | — | Control Center screens for the above | ✅ Tasks, Permissions, Activity, Memory, Agents, Assistant |
 | 8 | QA, docs, release report | ⏳ |
 
@@ -169,6 +169,32 @@ Ollama.
 - Tests: backend `tests/test_documents.py` (8, with real generated PDF,
   DOCX and XLSX files); app `test/features/documents_test.dart` (3).
 
+## Stage 7 — Pairing and secure transport
+- **Pairing codes:** a signed-in device (System → Devices → Pair a device)
+  creates an 8-character code (single use, 10 minutes, stored only as a
+  hash in Redis, redemption rate-limited 10 per 10 minutes per address).
+  The phone ("Pair with a code instead" on the sign-in screen) or the
+  Windows agent (`ultron-agent pair`) uses it instead of the password and
+  gets its own revocable device sign-in.
+- **HTTPS on the LAN:** `ultron-core tls-init --host <PC's LAN IP>` makes a
+  self-signed certificate (EC P-256) in the git-ignored `.ultron-core/tls`;
+  Core serves HTTPS when `ULTRON_TLS_CERT_FILE`/`ULTRON_TLS_KEY_FILE` are
+  set (Compose mounts the folder). The phone pins the certificate's
+  SHA-256 after you check its short form against the PC's dialog (the
+  pairing code is only sent after that), refuses a certificate that
+  differs from what Core reports, and from then on trusts only that
+  certificate. The agent trusts it via `[server] ca_file`.
+- **Real check (this sandbox):** generated a certificate, ran Core with
+  HTTPS: pinned client connected, unpinned client refused ("self-signed
+  certificate"), plain HTTP refused, on-the-wire fingerprint = reported
+  fingerprint, container health check works over HTTPS; the real agent
+  paired with a code over HTTPS and polled for work; reusing the code was
+  refused; without `ca_file` the agent stops with a clear message.
+- Tests: backend `test_pairing.py` (4), app `pairing_test.py` (7), agent
+  (+2).
+- **Not done:** QR-code pairing (needs a camera scanner); the phone has to
+  be on the same network as the PC (no relay/cloud reachability yet).
+
 ## Bugs found by the end-to-end run and fixed
 - **Agent long poll returned HTTP 500** when there was no work and it
   waited more than one round (expired ORM objects lazy-loading in async).
@@ -177,9 +203,9 @@ Ollama.
   and replacing `expire_all()` with targeted refreshes.
 
 ## Test results (latest run, 2026-11-10)
-- Backend: **199 passed, 11 skipped** (live Ollama tests), ruff clean.
-- App: **96 passed**, `flutter analyze` clean, release APK builds.
-- Agent: 29 passed (+1 Windows-only, runs in CI).
+- Backend: **203 passed, 11 skipped** (live Ollama tests), ruff clean.
+- App: **103 passed**, `flutter analyze` clean, release APK and web build.
+- Agent: **31 passed** (+1 Windows-only DPAPI test, runs in CI on Windows).
 
 ## Known bugs
 - None open.

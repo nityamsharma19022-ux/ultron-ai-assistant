@@ -28,9 +28,13 @@ class AppSettings {
     this.speakReplies = false,
     this.speechRate = 0.5,
     this.voiceLocale,
+    this.tlsFingerprint,
   });
 
   final String backendUrl;
+
+  /// SHA-256 of ULTRON Core's own HTTPS certificate, pinned when pairing.
+  final String? tlsFingerprint;
   final UltronAccent accent;
   final MotionLevel motion;
   final bool speakReplies;
@@ -44,6 +48,7 @@ class AppSettings {
     bool? speakReplies,
     double? speechRate,
     String? voiceLocale,
+    String? tlsFingerprint,
   }) => AppSettings(
     backendUrl: backendUrl ?? this.backendUrl,
     accent: accent ?? this.accent,
@@ -51,6 +56,7 @@ class AppSettings {
     speakReplies: speakReplies ?? this.speakReplies,
     speechRate: speechRate ?? this.speechRate,
     voiceLocale: voiceLocale ?? this.voiceLocale,
+    tlsFingerprint: tlsFingerprint ?? this.tlsFingerprint,
   );
 }
 
@@ -85,6 +91,7 @@ class SettingsController extends Notifier<AppSettings> {
   static const _kSpeak = 'speak_replies';
   static const _kRate = 'speech_rate';
   static const _kLocale = 'voice_locale';
+  static const _kPin = 'tls_fingerprint';
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -98,7 +105,13 @@ class SettingsController extends Notifier<AppSettings> {
       speakReplies: p.getBool(_kSpeak) ?? false,
       speechRate: p.getDouble(_kRate) ?? 0.5,
       voiceLocale: p.getString(_kLocale),
+      tlsFingerprint: p.getString(_kPin),
     );
+  }
+
+  Future<void> setTlsFingerprint(String fingerprint) async {
+    await _prefs.setString(_kPin, fingerprint);
+    state = state.copyWith(tlsFingerprint: fingerprint);
   }
 
   Future<void> setBackendUrl(String url) async {
@@ -136,6 +149,7 @@ class SettingsController extends Notifier<AppSettings> {
         motion: state.motion,
         speakReplies: state.speakReplies,
         speechRate: state.speechRate,
+        tlsFingerprint: state.tlsFingerprint,
       );
       return;
     }

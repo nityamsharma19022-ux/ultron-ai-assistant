@@ -89,6 +89,11 @@ services:
     extra_hosts:
       # Lets the container reach Ollama installed natively on the host.
       - "host.docker.internal:host-gateway"
+    volumes:
+      # HTTPS certificate from `ultron-core tls-init` (optional). Turn HTTPS
+      # on with ULTRON_TLS_CERT_FILE=/run/ultron-tls/cert.pem and
+      # ULTRON_TLS_KEY_FILE=/run/ultron-tls/key.pem in .env.
+      - ./.ultron-core/tls:/run/ultron-tls:ro
     depends_on:
       postgres:
         condition: service_healthy

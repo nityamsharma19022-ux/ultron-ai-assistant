@@ -78,6 +78,17 @@ class SessionController extends Notifier<SessionState> {
     state = SignedIn(await api.me());
   }
 
+  /// Signs in with a pairing code from an already signed-in device.
+  Future<void> pairWithCode({required String code, String? deviceName}) async {
+    final api = ref.read(apiProvider);
+    await api.redeemPairingCode(
+      code: code,
+      deviceName: (deviceName?.trim().isNotEmpty ?? false) ? deviceName!.trim() : defaultDeviceName(),
+      platform: platformName(),
+    );
+    state = SignedIn(await api.me());
+  }
+
   Future<void> signOut() async {
     await ref.read(apiProvider).logout();
     state = const SignedOut();

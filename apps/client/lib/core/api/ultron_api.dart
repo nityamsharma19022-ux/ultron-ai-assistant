@@ -133,6 +133,31 @@ class UltronApi {
     return pair;
   }
 
+  /// Public pairing information (is HTTPS on, and the certificate's fingerprint).
+  Future<PairingInfo> pairingInfo() async =>
+      PairingInfo.fromJson(await _json('GET', '/api/v1/pairing/info', auth: false));
+
+  /// A one-time code another device can use to sign in (10 minutes).
+  Future<PairingCode> createPairingCode({String? platform}) async =>
+      PairingCode.fromJson(await _json('POST', '/api/v1/pairing/codes', body: {'platform': ?platform}));
+
+  /// Signs this device in with a pairing code instead of a password.
+  Future<TokenPair> redeemPairingCode({
+    required String code,
+    required String deviceName,
+    required String platform,
+  }) async {
+    final body = await _json(
+      'POST',
+      '/api/v1/pairing/redeem',
+      auth: false,
+      body: {'code': code.trim(), 'device_name': deviceName, 'platform': platform},
+    );
+    final pair = TokenPair.fromJson(body);
+    await tokens.save(pair);
+    return pair;
+  }
+
   Future<void> logout() async {
     try {
       await _json('POST', '/api/v1/auth/logout', expectBody: false);

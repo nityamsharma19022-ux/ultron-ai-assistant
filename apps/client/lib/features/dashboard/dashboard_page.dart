@@ -14,6 +14,7 @@ import '../../widgets/glass_panel.dart';
 import '../agent/phone_agent.dart';
 import '../assistant/assistant_screen.dart';
 import '../visualizer/chat_visualizer.dart';
+import '../../core/settings/app_settings.dart';
 import 'dashboard_controller.dart';
 
 /// System status: ULTRON Core, AI providers, local model, devices.
@@ -379,6 +380,12 @@ class _DevicesCard extends ConsumerWidget {
       key: const Key('devices-card'),
       title: 'DEVICES',
       icon: Icons.devices_outlined,
+      trailing: TextButton.icon(
+        key: const Key('pair-device'),
+        onPressed: () => showDialog<void>(context: context, builder: (_) => const PairingDialog()),
+        icon: const Icon(Icons.add_link, size: 18),
+        label: const Text('Pair a device'),
+      ),
       child: devices.when(
         loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator(minHeight: 2)),
         error: (e, _) => Text(e is ApiException ? e.message : 'Could not load devices'),
@@ -553,6 +560,79 @@ class _AssistantCard extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Shows a one-time code for signing in a new device (phone or PC agent).
+class PairingDialog extends ConsumerStatefulWidget {
+  const PairingDialog({super.key});
+
+  @override
+  ConsumerState<PairingDialog> createState() => _PairingDialogState();
+}
+
+class _PairingDialogState extends ConsumerState<PairingDialog> {
+  late final Future<PairingCode> _code = ref.read(apiProvider).createPairingCode();
+
+  @override
+  Widget build(BuildContext context) {
+    final address = ref.watch(settingsProvider.select((s) => s.backendUrl));
+    return AlertDialog(
+      backgroundColor: UltronColors.surface,
+      title: const Text('Pair a new device'),
+      content: SizedBox(
+        width: 420,
+        child: FutureBuilder<PairingCode>(
+          future: _code,
+          builder: (context, snap) {
+            if (snap.hasError) {
+              final e = snap.error;
+              return Text(e is ApiException ? e.message : 'Could not create a code');
+            }
+            final code = snap.data;
+            if (code == null) return const LinearProgressIndicator(minHeight: 2);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('On the new device, open ULTRON, choose "Pair with a code" and enter:'),
+                const SizedBox(height: 16),
+                Center(
+                  child: SelectableText(
+                    code.code,
+                    key: const Key('pairing-code-display'),
+                    style: const TextStyle(fontFamily: 'Orbitron', fontSize: 30, letterSpacing: 4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(child: Text('Works once, for 10 minutes', style: Theme.of(context).textTheme.labelSmall)),
+                const SizedBox(height: 16),
+                _Row(
+                  'Server address',
+                  address,
+                  detail: 'From a phone, use this PC\'s Wi-Fi address instead of 127.0.0.1.',
+                ),
+                if (code.shortFingerprint != null)
+                  _Row(
+                    'Security code',
+                    code.shortFingerprint!,
+                    color: UltronColors.success,
+                    detail: 'The new device shows this when it connects. It must match exactly.',
+                  )
+                else
+                  const _Row(
+                    'Connection',
+                    'Not encrypted (http)',
+                    color: UltronColors.warning,
+                    detail: 'Turn on HTTPS with `ultron-core tls-init` before pairing a phone over Wi-Fi.',
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
     );
   }
 }

@@ -304,3 +304,27 @@ class DocumentInfo {
       ? '${(size / 1024).toStringAsFixed(0)} KB'
       : '$size B';
 }
+
+class PairingInfo {
+  const PairingInfo({required this.tls, this.fingerprint, this.shortFingerprint});
+  factory PairingInfo.fromJson(Map<String, dynamic> j) => PairingInfo(
+    tls: j['tls'] as bool? ?? false,
+    fingerprint: j['fingerprint'] as String?,
+    shortFingerprint: j['short_fingerprint'] as String?,
+  );
+  final bool tls;
+  final String? fingerprint;
+  final String? shortFingerprint;
+}
+
+class PairingCode {
+  const PairingCode({required this.code, required this.expiresAt, this.shortFingerprint});
+  factory PairingCode.fromJson(Map<String, dynamic> j) => PairingCode(
+    code: j['code'] as String,
+    expiresAt: _date(j['expires_at']),
+    shortFingerprint: j['short_fingerprint'] as String?,
+  );
+  final String code;
+  final DateTime expiresAt;
+  final String? shortFingerprint;
+}

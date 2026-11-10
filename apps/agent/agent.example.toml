@@ -7,6 +7,9 @@
 [server]
 # ULTRON Core on this PC.
 url = "http://127.0.0.1:8000"
+# If Core uses HTTPS (`ultron-core tls-init`), trust its certificate:
+# url = "https://127.0.0.1:8000"
+# ca_file = "D:\\ULTRON\\ultron-ai-assistant\\.ultron-core\\tls\\cert.pem"
 
 [agent]
 device_name = "Windows PC"

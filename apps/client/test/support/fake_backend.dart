@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -163,6 +164,9 @@ class FakeBackend {
   final grants = <String>{};
   final commands = <String>[];
   final documents = <Map<String, dynamic>>[];
+  String? pairingFingerprint;
+  String validPairingCode = 'ABCD-EFGH';
+  Map<String, dynamic>? pairingRedeemBody;
   final uploads = <String>[];
 
   /// How /assistant/command answers; default: a completed one-step task.
@@ -303,6 +307,22 @@ class FakeBackend {
       return Future.value(http.StreamedResponse(const Stream.empty(), 204));
     }
     switch (key) {
+      case 'GET /api/v1/pairing/info':
+        return ok({
+          'service': 'ultron-core',
+          'version': '0.1.0',
+          'tls': pairingFingerprint != null,
+          'fingerprint': pairingFingerprint,
+          'short_fingerprint': null,
+        });
+      case 'POST /api/v1/pairing/codes':
+        return ok({
+          'code': validPairingCode,
+          'expires_at': '2026-11-10T10:10:00Z',
+          'tls': pairingFingerprint != null,
+          'fingerprint': pairingFingerprint,
+          'short_fingerprint': pairingFingerprint == null ? null : 'AAAA-AAAA … BBBB-BBBB',
+        }, 201);
       case 'GET /api/v1/documents':
         return ok(documents);
       case 'POST /api/v1/documents':
@@ -621,6 +641,22 @@ class FakeBackend {
         final b = jsonDecode(body) as Map<String, dynamic>;
         if (b['refresh_token'] == 'refresh-$tokenCounter') return json(200, tokens());
         return json(401, {'detail': 'Not authenticated'});
+      case 'POST /api/v1/pairing/redeem':
+        final b = jsonDecode(body) as Map<String, dynamic>;
+        pairingRedeemBody = b;
+        final given = (b['code'] as String).toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+        if (given != validPairingCode.replaceAll('-', '')) {
+          return json(400, {'detail': 'That code is wrong or has expired.'});
+        }
+        return json(200, tokens());
+      case 'GET /api/v1/pairing/info':
+        return json(200, {
+          'service': 'ultron-core',
+          'version': '0.1.0',
+          'tls': pairingFingerprint != null,
+          'fingerprint': pairingFingerprint,
+          'short_fingerprint': null,
+        });
       case 'POST /api/v1/auth/logout':
         return http.StreamedResponse(const Stream.empty(), 204);
     }
@@ -650,6 +686,7 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   AssistantPlatform? assistantPlatform,
   PhonePlatform? phonePlatform,
   FileSource? fileSource,
+  List<Override> overrides = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -674,6 +711,7 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
         assistantPlatformProvider.overrideWithValue(assistantPlatform ?? const NoAssistantPlatform()),
         phonePlatformProvider.overrideWithValue(phonePlatform ?? const NoPhonePlatform()),
         fileSourceProvider.overrideWithValue(fileSource ?? const _NoFiles()),
+        ...overrides,
       ],
       child: UltronApp(pages: pages),
     ),

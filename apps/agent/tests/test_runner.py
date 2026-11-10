@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from ultron_agent import credentials
-from ultron_agent.client import CoreClient
+from ultron_agent.client import AuthError, CoreClient
 from ultron_agent.runner import capabilities, run
 
 
@@ -99,3 +99,36 @@ def test_credentials_are_encrypted_with_dpapi(config) -> None:
     raw = credentials.path(config.data_dir).read_bytes()
     assert b"very-secret-token" not in raw  # encrypted at rest
     assert credentials.load(config.data_dir).refresh_token == "very-secret-token"  # noqa: S105
+
+
+def test_pairing_with_a_code(config) -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        if seen["code"] != "ABCD-EFGH":
+            return httpx.Response(400, json={"detail": "That code is wrong or has expired."})
+        return httpx.Response(
+            200, json={"access_token": "a", "refresh_token": "r", "device_id": "pc-1"}
+        )
+
+    client = CoreClient("http://core.test", config.data_dir, transport=httpx.MockTransport(handler))
+    with pytest.raises(AuthError, match="wrong or has expired"):
+        client.pair("WRONG", "Desk PC")
+    assert credentials.load(config.data_dir) is None
+    client.pair("ABCD-EFGH", "Desk PC")
+    assert seen == {"code": "ABCD-EFGH", "device_name": "Desk PC", "platform": "windows"}
+    assert credentials.load(config.data_dir).device_id == "pc-1"
+
+
+def test_config_ca_file(tmp_path) -> None:
+    from ultron_agent import config as config_mod
+
+    cfg = tmp_path / "agent.toml"
+    cfg.write_text('[server]\nurl = "https://127.0.0.1:8000"\nca_file = "missing.pem"\n')
+    with pytest.raises(config_mod.ConfigError, match="ca_file not found"):
+        config_mod.load(cfg)
+    (tmp_path / "cert.pem").write_text("x")
+    cert = (tmp_path / "cert.pem").as_posix()
+    cfg.write_text(f'[server]\nurl = "https://127.0.0.1:8000"\nca_file = "{cert}"\n')
+    assert config_mod.load(cfg).ca_file == tmp_path / "cert.pem"

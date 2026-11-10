@@ -85,6 +85,10 @@ def _create_owner(args: argparse.Namespace) -> int:
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    settings = get_settings()
+    tls_args = {}
+    if settings.tls_cert_file and settings.tls_key_file:
+        tls_args = {"ssl_certfile": settings.tls_cert_file, "ssl_keyfile": settings.tls_key_file}
     uvicorn.run(
         "ultron_core.main:create_app",
         factory=True,
@@ -93,8 +97,50 @@ def _serve(args: argparse.Namespace) -> int:
         reload=args.reload,
         log_config=None,
         proxy_headers=True,
+        **tls_args,
     )
     return 0
+
+
+def _tls_init(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from ultron_core import tls
+
+    out = Path(args.out)
+    if (out / "cert.pem").exists() and not args.force:
+        print(
+            f"{out / 'cert.pem'} already exists (use --force to replace it; paired apps "
+            "would then need to pair again).",
+            file=sys.stderr,
+        )
+        return 1
+    cert, key = tls.generate(out, args.host)
+    fp = tls.fingerprint(cert)
+    print(f"Certificate: {cert}\nKey:         {key}")
+    print(f"Fingerprint: {fp}\nShort:       {tls.short(fp)}")
+    print("Add to .env (paths as ULTRON Core sees them):")
+    print(f"  ULTRON_TLS_CERT_FILE={cert}\n  ULTRON_TLS_KEY_FILE={key}")
+    return 0
+
+
+def _healthcheck(args: argparse.Namespace) -> int:
+    """Container health check (works with and without HTTPS)."""
+    import ssl
+    import urllib.request
+
+    settings = get_settings()
+    scheme = "https" if settings.tls_cert_file else "http"
+    context = ssl.create_default_context()
+    if settings.tls_cert_file:
+        context = ssl._create_unverified_context()  # noqa: S323 - our own cert, localhost only
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - fixed localhost URL
+            f"{scheme}://127.0.0.1:{args.port}/health/live", timeout=3, context=context
+        ) as response:
+            return 0 if response.status == 200 else 1
+    except OSError:
+        return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -111,6 +157,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--email", required=True)
     p.add_argument("--display-name")
     p.set_defaults(func=_create_owner)
+
+    p = sub.add_parser("tls-init", help="create a self-signed HTTPS certificate")
+    p.add_argument("--host", action="append", default=[], help="LAN IP or name (repeatable)")
+    p.add_argument(
+        "--out",
+        default=".ultron-core/tls",
+        help="folder for cert.pem and key.pem (git-ignored; default: .ultron-core/tls)",
+    )
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=_tls_init)
+
+    p = sub.add_parser("healthcheck")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=_healthcheck)
 
     p = sub.add_parser("serve")
     p.add_argument("--host", default="127.0.0.1")

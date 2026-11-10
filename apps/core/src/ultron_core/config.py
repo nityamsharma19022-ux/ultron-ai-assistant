@@ -148,6 +148,9 @@ class Settings(BaseSettings):
     assistant_wait_seconds: float = Field(default=20, ge=0, le=120)
     # Largest file accepted by POST /documents.
     document_max_mb: int = Field(default=20, ge=1, le=200)
+    # HTTPS on your network (`ultron-core tls-init`): certificate and key.
+    tls_cert_file: str | None = None
+    tls_key_file: str | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> Settings:
