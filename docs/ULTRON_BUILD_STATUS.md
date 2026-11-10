@@ -235,9 +235,10 @@ roadmap: [ULTRON_ROADMAP.md](ULTRON_ROADMAP.md); limitations:
   [ULTRON_RELEASE_CHECKLIST](ULTRON_RELEASE_CHECKLIST.md).
 
 ## Test results (latest run, 2026-11-10)
-- Backend: **221 passed** (+11 live-Ollama tests not run here), ruff clean.
-- App: **116 passed**, `flutter analyze` clean, release APK (58.7 MB) and
+- Backend: **228 passed** (+11 live-Ollama tests not run here), ruff clean.
+- App: **117 passed**, `flutter analyze` clean, release APK (58.7 MB) and
   web build.
+- FreeLLMAPI: real Core server ↔ stand-in gateway on 127.0.0.1:31415 PASS.
 - Agent: **36 passed** (+1 Windows-only DPAPI test, runs in CI on Windows).
 - Live check: Core rebuilt in Docker at migration `0007`; the web build
   in Chromium (1600 px desktop, 412 px phone) showed the Command Center

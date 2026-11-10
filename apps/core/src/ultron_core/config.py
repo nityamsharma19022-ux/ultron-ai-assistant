@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     # --- AI routing (cloud-first, local-fallback) -------------------------
     # Default order in which cloud providers are tried. Providers without an
     # API key + model are skipped automatically.
-    ai_cloud_providers: str = "groq,gemini,openrouter,custom,anthropic"
+    ai_cloud_providers: str = "freellmapi,groq,gemini,openrouter,custom,anthropic"
     # Preferred cloud providers per kind of request, e.g.
     # "coding=groq,openrouter;reasoning=anthropic;summarize=gemini".
     ai_task_profiles: str = ""
@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     ai_stream_keepalive_seconds: float = Field(default=10.0, gt=0, le=120)
 
     # Cloud providers (all optional). Keys stay on the server, never sent to clients.
+    # FreeLLMAPI: a self-hosted router on this PC that forwards to the free
+    # tiers of many cloud providers. It runs locally but the AI is in the
+    # cloud, so it counts as CLOUD (never used for private conversations).
+    freellmapi_api_key: SecretStr | None = None
+    freellmapi_model: str | None = "auto"
+    freellmapi_base_url: str | None = "http://127.0.0.1:31415/v1"
     groq_api_key: SecretStr | None = None
     groq_model: str | None = None
     groq_base_url: str = "https://api.groq.com/openai/v1"

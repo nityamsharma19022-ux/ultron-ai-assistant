@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/api/command_models.dart';
 import '../../core/api/models.dart';
 import '../../core/api/task_models.dart';
 import '../../core/platform/native.dart';
@@ -34,6 +35,7 @@ class DashboardPage extends ConsumerWidget {
           const _DevicesCard(),
           const _AgentsCard(),
           const _AssistantCard(),
+          const _UsageCard(),
         ];
         return RefreshIndicator(
           onRefresh: () async {
@@ -60,6 +62,8 @@ class DashboardPage extends ConsumerWidget {
                           cards[1],
                           const SizedBox(height: 16),
                           cards[5],
+                          const SizedBox(height: 16),
+                          cards[6],
                         ],
                       ),
                     ),
@@ -237,13 +241,34 @@ class _CoreCard extends StatelessWidget {
   }
 }
 
-class _ProvidersCard extends StatelessWidget {
+/// Results of "Test" per provider, kept while the app runs.
+final providerTestsProvider = NotifierProvider<ProviderTests, Map<String, AsyncValue<ProviderTestResult>>>(
+  ProviderTests.new,
+);
+
+class ProviderTests extends Notifier<Map<String, AsyncValue<ProviderTestResult>>> {
+  @override
+  Map<String, AsyncValue<ProviderTestResult>> build() => const {};
+
+  Future<void> run(String provider) async {
+    state = {...state, provider: const AsyncLoading()};
+    try {
+      final r = await ref.read(apiProvider).testProvider(provider);
+      state = {...state, provider: AsyncData(r)};
+    } on ApiException catch (e, st) {
+      state = {...state, provider: AsyncError(e, st)};
+    }
+  }
+}
+
+class _ProvidersCard extends ConsumerWidget {
   const _ProvidersCard({required this.status});
   final SystemStatus status;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ai = status.ai;
+    final tests = ref.watch(providerTestsProvider);
     return _Card(
       key: const Key('providers-card'),
       title: 'AI SOURCES',
@@ -269,13 +294,51 @@ class _ProvidersCard extends StatelessWidget {
                   color: ai.privateConversationsSupported ? UltronColors.local : UltronColors.textMuted,
                 ),
                 const Divider(height: 24),
-                for (final p in ai.providers)
-                  _Row(
-                    p.name,
-                    _providerLabel(p),
-                    color: _checkColor(p.status),
-                    detail: [p.kind, ?p.model, ?p.reason].join(' · '),
+                for (final p in ai.providers) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _Row(
+                          providerDisplayName(p.name),
+                          _providerLabel(p),
+                          color: _checkColor(p.status),
+                          detail: [p.kind, ?p.model, ?p.reason].join(' · '),
+                        ),
+                      ),
+                      if (p.configured)
+                        TextButton(
+                          key: Key('test-${p.name}'),
+                          onPressed: tests[p.name] is AsyncLoading
+                              ? null
+                              : () => ref.read(providerTestsProvider.notifier).run(p.name),
+                          child: tests[p.name] is AsyncLoading
+                              ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Text('Test'),
+                        ),
+                    ],
                   ),
+                  if (tests[p.name] case final t? when t is! AsyncLoading)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 130, bottom: 6),
+                      child: Text(
+                        key: Key('test-result-${p.name}'),
+                        switch (t) {
+                          AsyncData(:final value) when value.ok =>
+                            '✓ Answered "${value.reply}" in ${value.seconds}s via ${value.model ?? p.name}',
+                          AsyncData(:final value) => '✗ ${value.error ?? 'No answer'}',
+                          AsyncError(:final error) => '✗ ${error is ApiException ? error.message : error}',
+                          _ => '',
+                        },
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: t is AsyncData<ProviderTestResult> && t.value.ok
+                              ? UltronColors.success
+                              : UltronColors.danger,
+                        ),
+                      ),
+                    ),
+                ],
               ],
             ),
     );
@@ -633,6 +696,49 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
         ),
       ),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+    );
+  }
+}
+
+final aiUsageProvider = FutureProvider<UsageInfo>((ref) => ref.watch(apiProvider).aiUsage(days: 7));
+
+/// How many replies each AI source and model produced in the last 7 days.
+class _UsageCard extends ConsumerWidget {
+  const _UsageCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(aiUsageProvider);
+    return _Card(
+      key: const Key('usage-card'),
+      title: 'AI USAGE (7 DAYS)',
+      icon: Icons.insights_outlined,
+      trailing: IconButton(
+        tooltip: 'Refresh',
+        icon: const Icon(Icons.refresh, size: 18),
+        onPressed: () => ref.invalidate(aiUsageProvider),
+      ),
+      child: usage.when(
+        loading: () => const LinearProgressIndicator(minHeight: 2),
+        error: (e, _) => Text(e is ApiException ? e.message : 'Could not load usage'),
+        data: (u) => u.rows.isEmpty
+            ? const Text('No replies yet.', style: TextStyle(color: UltronColors.textMuted))
+            : Column(
+                children: [
+                  for (final r in u.rows)
+                    _Row(
+                      providerDisplayName(r.provider),
+                      '${r.replies} replies${r.failed > 0 ? ' · ${r.failed} failed' : ''}',
+                      color: r.kind == 'local' ? UltronColors.local : UltronColors.cloud,
+                      detail: [
+                        ?r.model,
+                        if (r.inputTokens + r.outputTokens > 0) '${r.inputTokens + r.outputTokens} tokens',
+                        if (r.fallbacks > 0) '${r.fallbacks} as fallback',
+                      ].join(' · '),
+                    ),
+                ],
+              ),
+      ),
     );
   }
 }

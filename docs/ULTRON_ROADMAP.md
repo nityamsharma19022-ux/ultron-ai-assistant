@@ -14,7 +14,7 @@ _Last updated: 2026-11-10._
 |---|---|---|---|
 | 1 | Inspect existing project | VERIFIED | Audit done; all earlier tests kept passing through every change |
 | 2 | Core architecture and controller | IMPLEMENTED | ULTRON Core (FastAPI, PostgreSQL, Redis), task engine, tool registry, agents protocol, operating modes, autonomy levels |
-| 3 | AI provider orchestration | IMPLEMENTED | Cloud-first / local fallback router (Groq, Gemini, OpenRouter, Anthropic, custom, Ollama), cooldowns, private → local only, routing by task type (`ULTRON_AI_TASK_PROFILES`). Real cloud call needs your key; real Ollama run on your PC |
+| 3 | AI provider orchestration | IMPLEMENTED | Cloud-first / local fallback router (FreeLLMAPI, Groq, Gemini, OpenRouter, Anthropic, custom, Ollama), provider test and usage monitoring, cooldowns, private → local only, routing by task type (`ULTRON_AI_TASK_PROFILES`). Real cloud call needs your key; real Ollama run on your PC |
 | 4 | Memory and synchronization | IN DEVELOPMENT | Done: memories with full-text search, project tags, pause saving, conversation search, export. Next: semantic (vector) search, offline cache and sync between devices |
 | 5 | Task planning and automation | IMPLEMENTED | Rules + AI planner, permission classes A/B/C, levels 0–5 per area, retries, verification, schedules, reminders, emergency stop, automatic safety pause |
 | 6 | Windows companion | TESTING | Agent: apps (open/switch/close/list running), files (list/search/read/write/copy/rename/move/organize/delete to Recycle Bin, undo), workflows, status, metrics, toasts, open links. Verified on Linux; run on your PC pending |
@@ -25,5 +25,5 @@ _Last updated: 2026-11-10._
 | 11 | External integrations | IN DEVELOPMENT | Done: safe web page reading (`web.read`). Next: integration framework (calendar, email, GitHub) with per-integration authorization |
 | 12 | Security and recovery | IMPLEMENTED | Device tokens, pairing codes, HTTPS with pinned certificate, audit log, safety pause, export, `pg_dump` backups. Next: scoped agent tokens, encrypted export |
 | 13 | Full system integration | IN DEVELOPMENT | Core ↔ app ↔ Windows agent ↔ phone wired together and tested with fakes and a real agent process on Linux |
-| 14 | Testing and performance optimization | IN DEVELOPMENT | 221 backend, 116 app, 36 agent tests (+1 Windows-only); CI on Linux and Windows |
+| 14 | Testing and performance optimization | IN DEVELOPMENT | 228 backend, 117 app, 36 agent tests (+1 Windows-only); CI on Linux and Windows |
 | 15 | Stable personal release | BLOCKED | Needs the checks on your PC and iQOO in [ULTRON_RELEASE_CHECKLIST.md](ULTRON_RELEASE_CHECKLIST.md) |

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from pydantic import BaseModel
 
 from ultron_core import ratelimit
 from ultron_core.ai import profiles
 from ultron_core.ai.errors import ModelNotInstalledError, ProviderError, ProviderNotConfiguredError
 from ultron_core.ai.router import AIRouter
-from ultron_core.ai.types import ProviderKind
+from ultron_core.ai.types import ChatMessage, ChatRequest, ProviderKind, StreamEnd, TextDelta
 from ultron_core.chat import service
 from ultron_core.chat.schemas import (
     AIStatus,
@@ -149,3 +151,131 @@ async def warmup_local_model(
         already_loaded=already,
         seconds=round(time.perf_counter() - started, 2),
     )
+
+
+class ProviderTestOut(BaseModel):
+    provider: str
+    kind: str
+    ok: bool
+    model: str | None = None
+    seconds: float
+    reply: str | None = None
+    error: str | None = None
+
+
+@router.post("/providers/{name}/test", response_model=ProviderTestOut)
+async def test_provider(
+    name: str, request: Request, principal: PrincipalDep, settings: SettingsDep, redis: RedisDep
+) -> ProviderTestOut:
+    """Sends one tiny message through ULTRON Core to this provider, so you can
+    check that Core itself (not just your PC) reaches it. Uses a little of
+    the provider's free quota, so it is rate-limited."""
+    if not await ratelimit.allow(
+        redis, settings, bucket="ai-test", identity=str(principal.user.id), limit=10, window=60
+    ):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many tests; wait a minute"
+        )
+    ai_router: AIRouter = request.app.state.ai_router
+    provider = next((p for p in ai_router.providers if p.name == name.lower()), None)
+    if provider is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Unknown AI provider")
+    started = time.perf_counter()
+    reply, model, error = "", provider.model, None
+    if not provider.is_configured():
+        error = f"Not set up: {provider.missing_configuration()}"
+    else:
+        probe = ChatRequest(
+            messages=(ChatMessage(role="user", content="Reply with the single word: ready"),),
+            system="You are a connection test. Answer with one word.",
+            max_output_tokens=16,
+        )
+        try:
+            async with asyncio.timeout(settings.ai_request_timeout_seconds):
+                async for event in provider.stream(probe):
+                    if isinstance(event, TextDelta):
+                        reply += event.text
+                    elif isinstance(event, StreamEnd) and event.model:
+                        model = event.model
+        except ProviderError as exc:
+            error = exc.message
+        except TimeoutError:
+            error = "No answer in time"
+    ok = error is None and bool(reply.strip())
+    if error is None and not ok:
+        error = "The provider answered with an empty reply"
+    return ProviderTestOut(
+        provider=provider.name,
+        kind=provider.kind.value,
+        ok=ok,
+        model=model,
+        seconds=round(time.perf_counter() - started, 2),
+        reply=reply.strip()[:200] or None,
+        error=error,
+    )
+
+
+class UsageRow(BaseModel):
+    provider: str
+    kind: str | None
+    model: str | None
+    replies: int
+    failed: int
+    fallbacks: int
+    input_tokens: int
+    output_tokens: int
+
+
+class UsageOut(BaseModel):
+    days: int
+    total_replies: int
+    rows: list[UsageRow]
+
+
+@router.get("/usage", response_model=UsageOut)
+async def usage(
+    principal: PrincipalDep, session: SessionDep, days: int = Query(default=7, ge=1, le=90)
+) -> UsageOut:
+    """How many replies each AI source and model produced (your account only)."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import case, func, select
+
+    from ultron_core.db.models import Conversation, Message
+
+    since = datetime.now(UTC) - timedelta(days=days)
+    stmt = (
+        select(
+            Message.provider,
+            Message.provider_kind,
+            Message.model,
+            func.count(),
+            func.sum(case((Message.status == "failed", 1), else_=0)),
+            func.sum(case((Message.fallback_used.is_(True), 1), else_=0)),
+            func.coalesce(func.sum(Message.input_tokens), 0),
+            func.coalesce(func.sum(Message.output_tokens), 0),
+        )
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(
+            Conversation.user_id == principal.user.id,
+            Message.role == "assistant",
+            Message.created_at >= since,
+            Message.provider.is_not(None),
+        )
+        .group_by(Message.provider, Message.provider_kind, Message.model)
+        .order_by(func.count().desc())
+    )
+    rows = [
+        UsageRow(
+            provider=p,
+            kind=k,
+            model=m,
+            replies=n,
+            failed=int(f or 0),
+            fallbacks=int(fb or 0),
+            input_tokens=int(i),
+            output_tokens=int(o),
+        )
+        for p, k, m, n, f, fb, i, o in (await session.execute(stmt)).all()
+    ]
+    return UsageOut(days=days, total_replies=sum(r.replies for r in rows), rows=rows)

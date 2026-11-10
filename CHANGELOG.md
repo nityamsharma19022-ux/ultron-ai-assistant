@@ -3,7 +3,20 @@
 All notable changes to ULTRON. Dates are when the work was committed to
 `claude/fervent-lovelace-fqank5`.
 
-## [Unreleased] — 2026-11-10 (round 2: "AI operating system")
+## [Unreleased] — 2026-11-10 (round 3: FreeLLMAPI)
+
+### Added
+- **FreeLLMAPI** gateway as the first cloud AI source
+  (`ULTRON_FREELLMAPI_*`; Docker reaches it at `host.docker.internal`).
+  Counts as cloud, so private conversations never use it. The real
+  upstream model (`X-Routed-Via`) and token counts are recorded.
+- **Test an AI provider through Core** (`POST /ai/providers/{name}/test`,
+  System → AI sources → Test).
+- **AI usage** per source and model (`GET /ai/usage`, System → AI usage).
+- Docs: [FREELLMAPI.md](docs/FREELLMAPI.md),
+  [ULTRON_STATUS_REPORT.md](docs/ULTRON_STATUS_REPORT.md).
+
+## 2026-11-10 (round 2: "AI operating system")
 
 ### Added
 - **Command Center** home screen: clock, active mode, command bar, quick

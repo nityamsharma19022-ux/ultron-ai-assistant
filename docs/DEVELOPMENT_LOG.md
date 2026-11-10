@@ -2,6 +2,28 @@
 
 Newest first. Each entry: what was done, how it was checked, what's left.
 
+## 2026-11-10 — Round 3: FreeLLMAPI and project audit
+
+Owner request: "Master development, integration & completion directive"
+(FreeLLMAPI gateway at `http://127.0.0.1:31415`).
+
+- **Mission 1 (audit):** [ULTRON_STATUS_REPORT.md](ULTRON_STATUS_REPORT.md).
+- **Mission 2 (GitHub):** branch clean and in sync with GitHub; CI green;
+  `main` untouched.
+- **Mission 3 (backend):** Docker services restarted and healthy; database
+  at revision 0007.
+- **Mission 4 (AI core):** FreeLLMAPI provider (cloud, never for private
+  chats), `/v1` added automatically, `X-Routed-Via` model recorded, token
+  counts requested; provider test endpoint and usage endpoint; Test button
+  and usage card in the app.
+- **Checks:** backend 228 PASS, app 117 PASS, agent 36 PASS. End to end:
+  a real Core server chatted through a stand-in gateway on
+  127.0.0.1:31415 (status ready, test OK, streamed reply, routed model and
+  tokens recorded); a private chat was refused and the gateway never
+  received it.
+- **Not verified:** your real FreeLLMAPI install (port and key), because
+  this sandbox can't reach your PC.
+
 ## 2026-11-10 — Round 2: toward an AI operating system
 
 Owner request: the "ULTRON ultimate master prompt" (autonomous

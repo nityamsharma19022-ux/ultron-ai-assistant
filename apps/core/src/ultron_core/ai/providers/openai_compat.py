@@ -38,6 +38,7 @@ class OpenAICompatibleProvider(ChatProvider):
         connect_timeout: float,
         read_timeout: float,
         extra_headers: dict[str, str] | None = None,
+        include_usage: bool = False,
     ) -> None:
         self.name = name
         self._http = http
@@ -47,6 +48,8 @@ class OpenAICompatibleProvider(ChatProvider):
         self.context_char_budget = context_char_budget
         self._timeout = httpx.Timeout(read_timeout, connect=connect_timeout)
         self._extra_headers = extra_headers or {}
+        # Ask for token counts in the stream (only where the API supports it).
+        self._include_usage = include_usage
 
     def is_configured(self) -> bool:
         return bool(
@@ -70,12 +73,15 @@ class OpenAICompatibleProvider(ChatProvider):
         messages = [{"role": "system", "content": request.system}]
         messages += [{"role": m.role, "content": m.content} for m in request.messages]
         # Deliberately no "tools"/"functions": responses are text only.
-        return {
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
             "stream": True,
             "max_tokens": request.max_output_tokens,
         }
+        if self._include_usage:
+            payload["stream_options"] = {"include_usage": True}
+        return payload
 
     async def stream(self, request: ChatRequest) -> AsyncIterator[StreamEvent]:
         if not self.is_configured():
@@ -102,6 +108,10 @@ class OpenAICompatibleProvider(ChatProvider):
                     raise classify_http_status(
                         resp.status_code, body, parse_retry_after(resp.headers.get("retry-after"))
                     )
+                # Routers such as FreeLLMAPI say which upstream model answered.
+                routed = resp.headers.get("x-routed-via")
+                if routed:
+                    model_used = routed.strip()[:200]
                 async for line in resp.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -114,7 +124,8 @@ class OpenAICompatibleProvider(ChatProvider):
                         continue
                     if isinstance(chunk, dict) and chunk.get("error"):
                         raise ProviderUnavailableError("Provider reported an error mid-stream")
-                    model_used = chunk.get("model") or model_used
+                    if not routed:
+                        model_used = chunk.get("model") or model_used
                     if chunk.get("usage"):
                         usage = chunk["usage"]
                     for choice in chunk.get("choices") or []:

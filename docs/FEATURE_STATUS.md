@@ -11,6 +11,8 @@ _Last updated: 2026-11-10._
 ## AI brain
 | Feature | Status | Evidence / notes |
 |---|---|---|
+| FreeLLMAPI gateway (first cloud source; counts as cloud) | VERIFIED (sandbox) / TESTING (your gateway) | `test_freellmapi.py`; real Core server ↔ stand-in gateway on 127.0.0.1:31415. See [FREELLMAPI.md](FREELLMAPI.md) |
+| Test a provider through Core; AI usage per model | VERIFIED (sandbox) | System → AI sources → Test; System → AI usage |
 | Cloud AI providers (Groq, Gemini, OpenRouter, Anthropic, custom OpenAI-compatible) | IMPLEMENTED | Adapter tests with mocked HTTP; real call needs your free API key |
 | Local AI (Ollama, `qwen3.5:4b`) with loading states and warm-up | TESTING | Tests with a fake Ollama; live run on your PC pending |
 | Cloud first, local fallback, cooldowns | IMPLEMENTED | Router tests |

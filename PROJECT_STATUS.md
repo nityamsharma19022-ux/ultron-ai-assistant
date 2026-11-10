@@ -2,6 +2,12 @@
 
 _Last updated: 2026-11-10_
 
+> **Round 3 (2026-11-10): FreeLLMAPI.** Core now uses your FreeLLMAPI
+> gateway as its first cloud AI source (never for private chats), can test
+> each AI source from the app, and shows AI usage per model. Full audit:
+> [docs/ULTRON_STATUS_REPORT.md](docs/ULTRON_STATUS_REPORT.md); setup:
+> [docs/FREELLMAPI.md](docs/FREELLMAPI.md).
+>
 > **Round 2 (2026-11-10): toward a personal AI operating system.** The app
 > now opens on a **Command Center** (live devices, tasks, reminders,
 > notifications, AI activity, autonomy; floating panels on desktop).

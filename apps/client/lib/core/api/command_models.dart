@@ -166,3 +166,84 @@ class SearchHit {
   final String snippet;
   final DateTime createdAt;
 }
+
+/// Result of sending one tiny test message to an AI provider through Core.
+class ProviderTestResult {
+  const ProviderTestResult({
+    required this.provider,
+    required this.ok,
+    required this.seconds,
+    this.model,
+    this.reply,
+    this.error,
+  });
+  factory ProviderTestResult.fromJson(Map<String, dynamic> j) => ProviderTestResult(
+    provider: j['provider'] as String,
+    ok: j['ok'] as bool? ?? false,
+    seconds: (j['seconds'] as num?)?.toDouble() ?? 0,
+    model: j['model'] as String?,
+    reply: j['reply'] as String?,
+    error: j['error'] as String?,
+  );
+  final String provider;
+  final bool ok;
+  final double seconds;
+  final String? model;
+  final String? reply;
+  final String? error;
+}
+
+class UsageRow {
+  const UsageRow({
+    required this.provider,
+    required this.replies,
+    this.kind,
+    this.model,
+    this.failed = 0,
+    this.fallbacks = 0,
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+  });
+  factory UsageRow.fromJson(Map<String, dynamic> j) => UsageRow(
+    provider: j['provider'] as String,
+    kind: j['kind'] as String?,
+    model: j['model'] as String?,
+    replies: j['replies'] as int? ?? 0,
+    failed: j['failed'] as int? ?? 0,
+    fallbacks: j['fallbacks'] as int? ?? 0,
+    inputTokens: j['input_tokens'] as int? ?? 0,
+    outputTokens: j['output_tokens'] as int? ?? 0,
+  );
+  final String provider;
+  final String? kind;
+  final String? model;
+  final int replies;
+  final int failed;
+  final int fallbacks;
+  final int inputTokens;
+  final int outputTokens;
+}
+
+class UsageInfo {
+  const UsageInfo({required this.days, required this.totalReplies, required this.rows});
+  factory UsageInfo.fromJson(Map<String, dynamic> j) => UsageInfo(
+    days: j['days'] as int? ?? 7,
+    totalReplies: j['total_replies'] as int? ?? 0,
+    rows: [for (final r in (j['rows'] as List? ?? const [])) UsageRow.fromJson(r as Map<String, dynamic>)],
+  );
+  final int days;
+  final int totalReplies;
+  final List<UsageRow> rows;
+}
+
+/// Friendly names for AI providers.
+String providerDisplayName(String name) => switch (name) {
+  'freellmapi' => 'FreeLLMAPI',
+  'groq' => 'Groq',
+  'gemini' => 'Gemini',
+  'openrouter' => 'OpenRouter',
+  'anthropic' => 'Anthropic',
+  'ollama' => 'Ollama (local)',
+  'custom' => 'Custom',
+  _ => name,
+};

@@ -247,6 +247,8 @@ class FakeBackend {
   final searchHits = <Map<String, dynamic>>[];
   final upcomingReminders = <Map<String, dynamic>>[];
   int exports = 0;
+  final providerTests = <String>[];
+  final usageRows = <Map<String, dynamic>>[];
   Map<String, dynamic> notificationSettings = {
     'quiet_start': null,
     'quiet_end': null,
@@ -301,6 +303,16 @@ class FakeBackend {
       }
       return Future.value(http.StreamedResponse(const Stream.empty(), 204));
     }
+    final test = RegExp(r'^/api/v1/ai/providers/([^/]+)/test$').firstMatch(path);
+    if (test != null && r.method == 'POST') {
+      final name = test.group(1)!;
+      providerTests.add(name);
+      return ok(
+        name == 'groq'
+            ? {'provider': name, 'kind': 'cloud', 'ok': true, 'model': 'llama', 'seconds': 0.4, 'reply': 'ready'}
+            : {'provider': name, 'kind': 'local', 'ok': false, 'seconds': 0.1, 'error': 'cannot reach provider'},
+      );
+    }
     switch ('${r.method} $path') {
       case 'GET /api/v1/modes':
         return ok(_modes());
@@ -330,6 +342,12 @@ class FakeBackend {
       case 'PUT /api/v1/notifications/settings':
         notificationSettings = b();
         return ok(notificationSettings);
+      case 'GET /api/v1/ai/usage':
+        return ok({
+          'days': 7,
+          'total_replies': usageRows.fold<int>(0, (n, r) => n + (r['replies'] as int)),
+          'rows': usageRows,
+        });
       case 'GET /api/v1/devices/metrics':
         return ok(metrics);
       case 'POST /api/v1/devices/metrics':

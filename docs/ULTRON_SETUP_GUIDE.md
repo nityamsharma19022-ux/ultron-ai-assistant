@@ -26,9 +26,11 @@ notepad .env
 ```
 
 Set at least `ULTRON_POSTGRES_PASSWORD`, `ULTRON_REDIS_PASSWORD` and
-`ULTRON_JWT_SECRET` (long random values). Optional cloud AI: add one or
-more free-tier keys (`ULTRON_GROQ_API_KEY`, `ULTRON_GEMINI_API_KEY`,
-`ULTRON_OPENROUTER_API_KEY`). `.env` is never committed.
+`ULTRON_JWT_SECRET` (long random values). Cloud AI: if you use the
+**FreeLLMAPI** gateway, follow [FREELLMAPI.md](FREELLMAPI.md) (key and
+port). Otherwise add one or more free-tier keys (`ULTRON_GROQ_API_KEY`,
+`ULTRON_GEMINI_API_KEY`, `ULTRON_OPENROUTER_API_KEY`). `.env` is never
+committed.
 
 ## 3. Start it
 
@@ -38,7 +40,8 @@ docker compose exec core ultron-core create-owner --email you@example.com
 ```
 
 Check: `http://127.0.0.1:8000/health/ready` shows `"status": "ready"` and
-database revision `0007` (migrations run automatically).
+database revision `0007` (migrations run automatically). In the app,
+**System → AI sources → Test** checks each AI source through Core.
 
 ## 4. Let the phone reach the PC (optional, recommended with HTTPS)
 

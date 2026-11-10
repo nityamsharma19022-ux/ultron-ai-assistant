@@ -248,6 +248,14 @@ class UltronApi {
         await _json('PUT', '/api/v1/automation', body: {'enabled': ?enabled, 'stopped': ?stopped, 'levels': ?levels}),
       );
 
+  /// Sends one tiny message to [provider] through ULTRON Core.
+  Future<ProviderTestResult> testProvider(String provider) async => ProviderTestResult.fromJson(
+    await _json('POST', '/api/v1/ai/providers/$provider/test', timeout: const Duration(seconds: 120)),
+  );
+
+  Future<UsageInfo> aiUsage({int days = 7}) async =>
+      UsageInfo.fromJson(await _json('GET', '/api/v1/ai/usage', query: {'days': '$days'}));
+
   // ---------------------------------------------------- command center
 
   Future<List<AssistantModeInfo>> modes() async => [

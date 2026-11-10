@@ -80,6 +80,9 @@ services:
       ULTRON_LOCAL_DATABASE_URL: postgresql://${ULTRON_POSTGRES_USER:-ultron}:${ULTRON_POSTGRES_PASSWORD:?Set ULTRON_POSTGRES_PASSWORD in .env}@postgres:5432/${ULTRON_POSTGRES_DB:-ultron}
       ULTRON_REDIS_URL: redis://default:${ULTRON_REDIS_PASSWORD:?Set ULTRON_REDIS_PASSWORD in .env}@redis:6379/0
       ULTRON_OLLAMA_BASE_URL: ${ULTRON_CORE_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # FreeLLMAPI gateway on the Windows host (the container's own
+      # 127.0.0.1 is not the PC).
+      ULTRON_FREELLMAPI_BASE_URL: ${ULTRON_CORE_FREELLMAPI_BASE_URL:-http://host.docker.internal:31415/v1}
       ULTRON_LOG_FORMAT: ${ULTRON_CORE_LOG_FORMAT:-json}
       ULTRON_RUN_MIGRATIONS_ON_START: "true"
     ports:
@@ -87,7 +90,7 @@ services:
       # backend over Wi-Fi, set ULTRON_CORE_BIND_HOST=0.0.0.0 (see docs).
       - "${ULTRON_CORE_BIND_HOST:-127.0.0.1}:${ULTRON_CORE_PORT:-8000}:8000"
     extra_hosts:
-      # Lets the container reach Ollama installed natively on the host.
+      # Lets the container reach Ollama and FreeLLMAPI running on the host.
       - "host.docker.internal:host-gateway"
     volumes:
       # HTTPS certificate from `ultron-core tls-init` (optional). Turn HTTPS

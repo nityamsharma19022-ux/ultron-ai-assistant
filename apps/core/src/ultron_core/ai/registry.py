@@ -15,7 +15,16 @@ from ultron_core.ai.router import AIRouter
 from ultron_core.ai.types import ProviderKind
 from ultron_core.config import Settings
 
-CLOUD_PROVIDER_NAMES = ("groq", "gemini", "openrouter", "custom", "anthropic")
+CLOUD_PROVIDER_NAMES = ("freellmapi", "groq", "gemini", "openrouter", "custom", "anthropic")
+
+
+def _v1(url: str | None) -> str | None:
+    """FreeLLMAPI's OpenAI-compatible routes live under /v1; accept the
+    gateway address with or without it."""
+    if not url:
+        return url
+    url = url.rstrip("/")
+    return url if url.endswith("/v1") else url + "/v1"
 
 
 def build_providers(settings: Settings, http: httpx.AsyncClient) -> list[ChatProvider]:
@@ -26,6 +35,14 @@ def build_providers(settings: Settings, http: httpx.AsyncClient) -> list[ChatPro
         "read_timeout": settings.ai_request_timeout_seconds,
     }
     providers: list[ChatProvider] = [
+        OpenAICompatibleProvider(
+            name="freellmapi",
+            base_url=_v1(settings.freellmapi_base_url),
+            api_key=settings.freellmapi_api_key,
+            model=settings.freellmapi_model,
+            include_usage=True,
+            **common,
+        ),
         OpenAICompatibleProvider(
             name="groq",
             base_url=settings.groq_base_url,

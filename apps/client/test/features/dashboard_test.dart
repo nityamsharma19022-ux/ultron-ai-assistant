@@ -80,4 +80,39 @@ void main() {
     expect(backend.devices[1]['revoked_at'], isNotNull);
     expect(find.text('Pixel phone'), findsNothing);
   });
+
+  testWidgets('Test button checks a provider through Core; usage per model', (tester) async {
+    final backend = FakeBackend();
+    backend.usageRows.add({
+      'provider': 'freellmapi',
+      'kind': 'cloud',
+      'model': 'groq/llama-3.3-70b',
+      'replies': 12,
+      'failed': 1,
+      'fallbacks': 0,
+      'input_tokens': 900,
+      'output_tokens': 300,
+    });
+    await pumpUltron(tester, backend, signedIn: true, size: const Size(1600, 2000));
+    await openDashboard(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('test-groq')));
+    await tester.tap(find.byKey(const Key('test-groq')));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(backend.providerTests, ['groq']);
+    expect(find.textContaining('Answered "ready" in 0.4s via llama'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('test-ollama')));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('✗ cannot reach provider'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('usage-card')));
+    expect(find.text('FreeLLMAPI'), findsOneWidget);
+    expect(find.text('12 replies · 1 failed'), findsOneWidget);
+    expect(find.text('groq/llama-3.3-70b · 1200 tokens'), findsOneWidget);
+  });
 }
