@@ -249,18 +249,69 @@ class VoiceController extends Notifier<VoiceState> {
 
   // ------------------------------------------------------------- speaking
 
+  // Streaming read-aloud: sentences are spoken as soon as they are complete.
+  String? _readingId;
+  int _spokenUpTo = 0;
+  final _queue = <String>[];
+  bool _private = false;
+
   void _onChat(ChatState? previous, ChatState next) {
     final before = previous?.conversation?.id;
     if (before != null && before != next.conversation?.id) stopSpeaking();
     // A new message interrupts whatever is being read.
     if (previous != null && !previous.busy && next.busy) stopSpeaking();
-    if (previous == null || previous.messages.length != next.messages.length) return;
-    final was = previous.messages.lastOrNull;
+    if (!ref.read(settingsProvider).speakReplies) return;
     final now = next.messages.lastOrNull;
-    if (was == null || now == null || was.isUser || now.isUser) return;
-    if (was.status == MessageStatus.streaming && now.status == MessageStatus.complete) {
-      if (ref.read(settingsProvider).speakReplies) speak(now.content, private: next.isPrivate);
+    if (now == null || now.isUser) return;
+    if (now.status == MessageStatus.cancelled) {
+      if (_readingId == now.id) stopSpeaking();
+      return;
     }
+    final streaming = now.status == MessageStatus.streaming;
+    final finished = now.status == MessageStatus.complete;
+    if (!streaming && !finished) return;
+    if (_readingId != now.id) {
+      // Only replies that stream in while we watch are read (not history).
+      final was = previous?.messages.lastOrNull;
+      if (!(streaming || (was != null && !was.isUser && was.status == MessageStatus.streaming))) return;
+      _readingId = now.id;
+      _spokenUpTo = 0;
+      _private = next.isPrivate;
+    }
+    final upTo = finished ? now.content.length : speakableBoundary(now.content, _spokenUpTo);
+    if (upTo <= _spokenUpTo) return;
+    final chunk = speakableText(now.content.substring(_spokenUpTo, upTo));
+    _spokenUpTo = upTo;
+    if (chunk.isNotEmpty) _enqueue(chunk);
+  }
+
+  void _enqueue(String text) {
+    if (state.listening) return;
+    _queue.add(text);
+    if (!state.speaking) unawaited(_drain(++_speakSession));
+  }
+
+  Future<void> _drain(int session) async {
+    final settings = ref.read(settingsProvider);
+    state = state.copyWith(speaking: true);
+    while (_queue.isNotEmpty && session == _speakSession) {
+      final outcome = await _output.speak(
+        _queue.removeAt(0),
+        rate: settings.speechRate,
+        locale: settings.voiceLocale,
+        localOnly: _private,
+      );
+      if (session != _speakSession) return;
+      if (outcome != SpeakOutcome.spoken) {
+        _queue.clear();
+        _notice(
+          outcome == SpeakOutcome.noLocalVoice
+              ? privateNoOfflineVoice
+              : "Couldn't speak: no text-to-speech voice is available on this device.",
+        );
+      }
+    }
+    if (session == _speakSession) state = state.copyWith(speaking: false);
   }
 
   /// Reads [text] aloud with the user's voice settings.
@@ -290,11 +341,32 @@ class VoiceController extends Notifier<VoiceState> {
   }
 
   Future<void> stopSpeaking() async {
+    _queue.clear();
+    // Whatever is still streaming in is not read any more.
+    if (_readingId != null) _spokenUpTo = 1 << 30;
     if (!state.speaking) return;
     _speakSession++;
     state = state.copyWith(speaking: false);
     await _output.stop();
   }
+}
+
+/// Where the text from [from] can be read up to: just after the last complete
+/// sentence (., !, ?, Hindi ।, or a line break), never inside an unfinished
+/// code block, and only once there are a few words to say. Returns [from]
+/// when nothing is ready yet.
+int speakableBoundary(String text, int from, {int minChars = 12}) {
+  if (from >= text.length) return from;
+  var end = from;
+  final re = RegExp(r'[.!?।](?=\s)|\n');
+  for (final m in re.allMatches(text, from)) {
+    final cut = m.end;
+    // Inside an open ``` block: wait until it closes.
+    if ('```'.allMatches(text.substring(0, cut)).length.isOdd) break;
+    end = cut;
+  }
+  if (end - from < minChars) return from;
+  return end;
 }
 
 /// Text to read aloud: code blocks and Markdown markers removed, links
