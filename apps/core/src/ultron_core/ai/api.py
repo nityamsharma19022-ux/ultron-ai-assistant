@@ -47,9 +47,13 @@ async def ai_status(
         else:
             state = "ready"
         loaded = None
+        processor = None
         check = getattr(provider, "model_loaded", None)
         if state == "ready" and check is not None:
             loaded = await check()
+            where = getattr(provider, "processor", None)
+            if loaded and where is not None:
+                processor = await where()
         items.append(
             ProviderStatus(
                 name=provider.name,
@@ -61,6 +65,7 @@ async def ai_status(
                 reason=availability.reason,
                 cooldown_remaining_seconds=round(cooldown.remaining) if cooldown else None,
                 model_loaded=loaded,
+                processor=processor,
             )
         )
     local_ready = any(i.available for i in items if i.kind == ProviderKind.LOCAL.value)

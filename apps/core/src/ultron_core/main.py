@@ -38,6 +38,20 @@ from ultron_core.tasks.engine import TaskEngine
 log = get_logger("ultron.app")
 
 
+async def _warm_local_ai(providers: list[ChatProvider]) -> None:
+    """Loads the local model in the background so the first reply is fast."""
+    for provider in providers:
+        warmup = getattr(provider, "warmup", None)
+        if warmup is None or not provider.is_configured():
+            continue
+        try:
+            if (await provider.availability()).available:
+                already = await warmup()
+                log.info("ai.local_warmed", provider=provider.name, already_loaded=already)
+        except Exception as exc:  # optional: never blocks start-up
+            log.info("ai.local_warmup_skipped", provider=provider.name, error=type(exc).__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
@@ -76,9 +90,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     if app.state.start_task_engine:
         app.state.task_engine.start()
+    warm: asyncio.Task[None] | None = None
+    if settings.ollama_warm_on_start and settings.env != "test":
+        warm = asyncio.create_task(_warm_local_ai(providers))
     try:
         yield
     finally:
+        if warm is not None and not warm.done():
+            warm.cancel()
         await app.state.task_engine.stop()
         await app.state.generations.shutdown()
         for provider in providers:

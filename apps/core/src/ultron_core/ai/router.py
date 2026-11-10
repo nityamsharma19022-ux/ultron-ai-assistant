@@ -22,6 +22,7 @@ a fallback happened.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
@@ -123,7 +124,7 @@ class MidStreamError(Exception):
 
 
 # Skip outcomes don't count as "a fallback happened"; real failures do.
-_NEUTRAL_OUTCOMES = {"not_configured", "skipped_private", "ok"}
+_NEUTRAL_OUTCOMES = {"not_configured", "skipped_private", "ok", "raced_out"}
 
 
 class AIRouter:
@@ -162,52 +163,69 @@ class AIRouter:
             return cloud
         return [*cloud, *self.local_providers]
 
+    async def _skip(
+        self, provider: ChatProvider, private: bool, network_down: bool
+    ) -> Attempt | None:
+        """Why this provider can't be used right now (None: it can)."""
+        # Belt and braces: a private conversation never reaches the cloud.
+        if private and provider.kind is not ProviderKind.LOCAL:
+            return Attempt(provider.name, provider.kind, "skipped_private")
+        if not provider.is_configured():
+            return Attempt(
+                provider.name, provider.kind, "not_configured", provider.missing_configuration()
+            )
+        if network_down and provider.kind is ProviderKind.CLOUD:
+            return Attempt(provider.name, provider.kind, "skipped_offline")
+        cooldown = await self.cooldowns.get(provider.name)
+        if cooldown is not None:
+            return Attempt(
+                provider.name,
+                provider.kind,
+                f"cooldown_{cooldown.code}",
+                f"{round(cooldown.remaining)}s remaining",
+            )
+        if provider.kind is ProviderKind.LOCAL:
+            availability = await provider.availability()
+            if not availability.available:
+                return Attempt(provider.name, provider.kind, "unavailable", availability.reason)
+        return None
+
     async def stream(
         self,
         build_request: Callable[[ChatProvider], ChatRequest],
         prefs: RoutingPreferences,
         *,
         private: bool,
+        race: int = 1,
     ) -> AsyncIterator[RouterEvent]:
+        """Streams a reply from the first provider that can answer. With
+        ``race`` >= 2 (Instant mode), that many cloud providers start at once
+        and the first to produce text wins; the others are cancelled."""
         attempts: list[Attempt] = []
         network_down = False
+        candidates = self.candidates(prefs, private)
 
-        for provider in self.candidates(prefs, private):
-            # Belt and braces: a private conversation never reaches the cloud.
-            if private and provider.kind is not ProviderKind.LOCAL:
-                attempts.append(Attempt(provider.name, provider.kind, "skipped_private"))
-                continue
-            if not provider.is_configured():
-                attempts.append(
-                    Attempt(
-                        provider.name,
-                        provider.kind,
-                        "not_configured",
-                        provider.missing_configuration(),
-                    )
-                )
-                continue
-            if network_down and provider.kind is ProviderKind.CLOUD:
-                attempts.append(Attempt(provider.name, provider.kind, "skipped_offline"))
-                continue
-            cooldown = await self.cooldowns.get(provider.name)
-            if cooldown is not None:
-                attempts.append(
-                    Attempt(
-                        provider.name,
-                        provider.kind,
-                        f"cooldown_{cooldown.code}",
-                        f"{round(cooldown.remaining)}s remaining",
-                    )
-                )
-                continue
-            if provider.kind is ProviderKind.LOCAL:
-                availability = await provider.availability()
-                if not availability.available:
-                    attempts.append(
-                        Attempt(provider.name, provider.kind, "unavailable", availability.reason)
-                    )
+        if race >= 2 and not private:
+            contenders: list[ChatProvider] = []
+            for provider in candidates:
+                if provider.kind is not ProviderKind.CLOUD or len(contenders) >= race:
                     continue
+                if await self._skip(provider, private, network_down) is None:
+                    contenders.append(provider)
+            if len(contenders) >= 2:
+                state = {"network_down": False, "completed": False}
+                async for event in self._race(contenders, build_request, attempts, state):
+                    yield event
+                if state["completed"]:
+                    return
+                network_down = bool(state["network_down"])
+                candidates = [p for p in candidates if p not in contenders]
+
+        for provider in candidates:
+            skipped = await self._skip(provider, private, network_down)
+            if skipped is not None:
+                attempts.append(skipped)
+                continue
 
             route = RouteInfo(
                 provider=provider.name,
@@ -262,6 +280,99 @@ class AIRouter:
             return
 
         raise self._no_provider_error(prefs, private, attempts, network_down)
+
+    async def _race(
+        self,
+        contenders: list[ChatProvider],
+        build_request: Callable[[ChatProvider], ChatRequest],
+        attempts: list[Attempt],
+        state: dict[str, bool],
+    ) -> AsyncIterator[RouterEvent]:
+        """Runs ``contenders`` at once; the first to stream text wins."""
+        queue: asyncio.Queue[tuple[ChatProvider, object]] = asyncio.Queue()
+        done = object()
+
+        async def pump(provider: ChatProvider) -> None:
+            try:
+                async for event in provider.stream(build_request(provider)):
+                    await queue.put((provider, event))
+                await queue.put((provider, done))
+            except ProviderError as exc:
+                await queue.put((provider, exc))
+
+        tasks = {p.name: asyncio.create_task(pump(p)) for p in contenders}
+        winner: ChatProvider | None = None
+        route: RouteInfo | None = None
+        ends: dict[str, StreamEnd] = {}
+        failed: set[str] = set()
+        try:
+            for p in contenders:
+                yield ProviderAttempt(p.name, p.kind, p.model)
+            while True:
+                provider, event = await queue.get()
+                if winner is not None and provider is not winner:
+                    continue
+                if isinstance(event, ProviderError):
+                    attempts.append(
+                        Attempt(provider.name, provider.kind, event.code, event.message)
+                    )
+                    log.warning(
+                        "ai.provider_failed", provider=provider.name, code=event.code, raced=True
+                    )
+                    if event.effective_cooldown > 0:
+                        await self.cooldowns.set(
+                            provider.name, event.code, event.effective_cooldown
+                        )
+                    if event.network_down:
+                        state["network_down"] = True
+                    if winner is not None:
+                        assert route is not None  # noqa: S101
+                        raise MidStreamError(event, route) from event
+                    failed.add(provider.name)
+                    if len(failed) == len(contenders):
+                        return  # all failed before any text: the caller falls back
+                    continue
+                if isinstance(event, StreamEnd):
+                    ends[provider.name] = event
+                    continue
+                if winner is None:
+                    # First text (or a reply with no text at all) wins.
+                    winner = provider
+                    for name, task in tasks.items():
+                        if name != provider.name:
+                            task.cancel()
+                    for p in contenders:
+                        if p is not provider and p.name not in failed:
+                            attempts.append(Attempt(p.name, p.kind, "raced_out"))
+                    route = RouteInfo(
+                        provider=provider.name,
+                        kind=provider.kind,
+                        model=provider.model,
+                        fallback_used=any(a.outcome not in _NEUTRAL_OUTCOMES for a in attempts),
+                        attempts=attempts,
+                    )
+                    yield ProviderSelected(route)
+                if event is done:
+                    assert route is not None  # noqa: S101
+                    end = ends.get(provider.name, StreamEnd(model=provider.model))
+                    if end.model:
+                        route.model = end.model
+                    attempts.append(Attempt(provider.name, provider.kind, "ok"))
+                    log.info(
+                        "ai.reply_routed",
+                        provider=provider.name,
+                        kind=provider.kind.value,
+                        raced=True,
+                    )
+                    state["completed"] = True
+                    yield Completed(route, end)
+                    return
+                yield event  # TextDelta
+        finally:
+            for task in tasks.values():
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
 
     def _no_provider_error(
         self,

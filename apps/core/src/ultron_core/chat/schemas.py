@@ -171,6 +171,8 @@ class ProviderStatus(BaseModel):
     cooldown_remaining_seconds: int | None = None
     # Local providers: whether the model is already in memory (None = unknown).
     model_loaded: bool | None = None
+    # Local models: "gpu", "cpu" or "partial" while loaded.
+    processor: str | None = None
 
 
 class AIStatus(BaseModel):

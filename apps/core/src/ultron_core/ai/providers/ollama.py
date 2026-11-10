@@ -176,6 +176,28 @@ class OllamaProvider(ChatProvider):
         assert self.model is not None  # noqa: S101
         return any(model_matches(self.model, n) for n in names)
 
+    async def processor(self) -> str | None:
+        """Where the loaded model runs: "gpu", "cpu", "partial" (split), or None
+        if it isn't loaded / unknown. From Ollama's /api/ps (size vs size_vram)."""
+        if not self.is_configured():
+            return None
+        try:
+            resp = await self._http.get(f"{self._base_url}/api/ps", timeout=self._probe_timeout)
+            resp.raise_for_status()
+            models = resp.json().get("models", [])
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return None
+        assert self.model is not None  # noqa: S101
+        entry = next((m for m in models if model_matches(self.model, m.get("name", ""))), None)
+        if entry is None:
+            return None
+        size, vram = int(entry.get("size") or 0), int(entry.get("size_vram") or 0)
+        if size <= 0:
+            return None
+        if vram <= 0:
+            return "cpu"
+        return "gpu" if vram >= size * 0.95 else "partial"
+
     async def warmup(self) -> bool:
         """Load the model into memory without generating anything.
 

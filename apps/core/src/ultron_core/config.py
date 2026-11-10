@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # apps/core/src/ultron_core/config.py -> repository root is 4 levels up.
@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     # Preferred cloud providers per kind of request, e.g.
     # "coding=groq,openrouter;reasoning=anthropic;summarize=gemini".
     ai_task_profiles: str = ""
+    # Try cloud providers fastest first (rolling average time to first word).
+    ai_rank_by_speed: bool = True
+    # Instant mode: start the two fastest cloud providers at once, keep the first.
+    ai_instant_race: bool = True
     ai_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     ai_request_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
     ai_max_output_tokens: int = Field(default=2048, ge=64, le=32_000)
@@ -156,13 +160,18 @@ class Settings(BaseSettings):
     # Context window sent to Ollama (tokens). Ollama's own default can be 4096.
     ollama_num_ctx: int | None = Field(default=8192, ge=1024, le=1_048_576)
     # How long Ollama keeps the model loaded after a request, e.g. "10m".
-    ollama_keep_alive: str | None = None
+    # How long Ollama keeps the model in memory after use ("-1" = always,
+    # e.g. "30m" to free memory sooner). Loaded models answer much faster.
+    ollama_keep_alive: str | None = "-1"
+    # Load the local model when Core starts, so the first reply is fast.
+    ollama_warm_on_start: bool = True
 
     # --- Chat ---------------------------------------------------------------
     chat_max_message_chars: int = Field(default=12_000, ge=100, le=100_000)
     chat_rate_limit_per_minute: int = Field(default=20, ge=1, le=1000)
     # How many saved memories are added to the AI's context per message.
-    memory_context_limit: int = Field(default=8, ge=0, le=50)
+    # Memories given to the AI per message (Instant mode uses 3).
+    memory_context_limit: int = Field(default=5, ge=0, le=50)
     # Tasks: how long a step waits for its device (PC/phone) to connect, and
     # how long a device may take to finish a step before it's retried.
     task_device_wait_minutes: int = Field(default=30, ge=1, le=24 * 60)
@@ -174,6 +183,12 @@ class Settings(BaseSettings):
     # HTTPS on your network (`ultron-core tls-init`): certificate and key.
     tls_cert_file: str | None = None
     tls_key_file: str | None = None
+
+    @field_validator("ollama_keep_alive", mode="before")
+    @classmethod
+    def _keep_alive(cls, value: object) -> object:
+        # An empty value (older .env files) means the default: keep loaded.
+        return "-1" if value is None or (isinstance(value, str) and not value.strip()) else value
 
     @model_validator(mode="after")
     def _validate(self) -> Settings:

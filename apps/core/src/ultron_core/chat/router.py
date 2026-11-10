@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from ultron_core import persona, ratelimit, timefmt
 from ultron_core.ai import profiles
+from ultron_core.ai import speed as ai_speed
 from ultron_core.ai.context import SYSTEM_PROMPT
 from ultron_core.ai.router import RoutingPreferences
 from ultron_core.chat import service
@@ -257,6 +258,17 @@ async def send_message(
         if speed == "deep" and kind == "chat":
             kind = "reasoning"
         prefs = profiles.preferences_for(kind, prefs, settings.ai_task_profiles)
+        ai_router = request.app.state.ai_router
+        if settings.ai_rank_by_speed and speed != "deep" and not conversation.is_private:
+            # Fastest providers first; Deep mode keeps your chosen order (quality).
+            base = [*prefs.cloud_order, *ai_router.default_cloud_order]
+            order = list(dict.fromkeys(base))
+            preferred = profiles.parse(settings.ai_task_profiles).get(kind, [])
+            averages = await ai_speed.averages(session, principal.user.id)
+            prefs = RoutingPreferences(
+                mode=prefs.mode, cloud_order=ai_speed.rank(order, preferred, averages)
+            )
+        race = 2 if speed == "instant" and settings.ai_instant_race else 1
         memory_on = stored_prefs.memory_enabled and mode.memory
         offset = body.utc_offset_minutes
         if offset is None:
@@ -282,7 +294,7 @@ async def send_message(
                 body.content,
                 private=conversation.is_private,
                 limit=(
-                    max(1, settings.memory_context_limit // 2)
+                    min(3, settings.memory_context_limit)
                     if speed == "instant"
                     else settings.memory_context_limit
                 ),
@@ -317,6 +329,7 @@ async def send_message(
         variant={"instant": "fast", "balanced": "default", "deep": "smart"}[speed],
         max_output_tokens=max_tokens,
         received_at=received_at,
+        race=race,
         system=SYSTEM_PROMPT
         + style
         + mode.prompt()

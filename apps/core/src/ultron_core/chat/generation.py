@@ -108,6 +108,7 @@ class GenerationManager:
         variant: str = "default",
         max_output_tokens: int | None = None,
         received_at: float | None = None,
+        race: int = 1,
     ) -> None:
         active.task = asyncio.create_task(
             self._run(
@@ -122,6 +123,7 @@ class GenerationManager:
                 variant,
                 max_output_tokens,
                 received_at,
+                race,
             ),
             name=f"ultron-generation-{active.conversation_id}",
         )
@@ -139,6 +141,7 @@ class GenerationManager:
         variant: str = "default",
         max_output_tokens: int | None = None,
         received_at: float | None = None,
+        race: int = 1,
     ) -> None:
         # Timed from when Core received the message (includes memory lookup).
         started = received_at or time.perf_counter()
@@ -164,7 +167,9 @@ class GenerationManager:
             await active.queue.put(("status", {"phase": "routing"}))
             async with (
                 asyncio.timeout(limit),
-                contextlib.aclosing(router.stream(build_request, prefs, private=private)) as events,
+                contextlib.aclosing(
+                    router.stream(build_request, prefs, private=private, race=race)
+                ) as events,
             ):
                 async for event in events:
                     if isinstance(event, ProviderAttempt):
