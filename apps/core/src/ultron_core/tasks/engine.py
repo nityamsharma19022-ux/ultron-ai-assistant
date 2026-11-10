@@ -364,6 +364,9 @@ class TaskEngine:
                 task_id=task.id,
                 dedupe_key=f"failed:{task.id}",
             )
+            from ultron_core import safety
+
+            await safety.after_failure(s, task.user_id)
         verb = {"completed": "Completed", "failed": "Failed", "cancelled": "Cancelled"}[status]
         activity.record(
             s,

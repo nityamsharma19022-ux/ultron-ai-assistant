@@ -112,6 +112,8 @@ class Conversation(IdMixin, TimestampMixin, Base):
     # Private conversations only ever use local AI and are only stored by a
     # local backend. Once private, always private.
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Optional project this conversation belongs to (scopes memory recall).
+    project: Mapped[str | None] = mapped_column(String(80))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
 
@@ -128,6 +130,7 @@ class Message(IdMixin, TimestampMixin, Base):
             name="status",
         ),
         Index("ix_messages_conversation_seq", "conversation_id", "seq"),
+        Index("ix_messages_search", "search", postgresql_using="gin"),
     )
 
     # Server-assigned order (also the basis for the future sync change feed).
@@ -145,6 +148,10 @@ class Message(IdMixin, TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(60))
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
+    # Full-text search over past conversations.
+    search: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), deferred=True
+    )
     version: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
 
     # eager_defaults: read server-set columns (updated_at) back immediately.
@@ -164,6 +171,11 @@ class UserAIPreferences(Base):
     # Saved memories are added to the AI's context (Stage 2).
     memory_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
+    )
+    # Stops ULTRON (chat, tasks) from saving new memories; the user can
+    # still add memories by hand.
+    memory_saving_paused: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
     # Operating mode (built-in key or a custom mode's key).
     active_mode: Mapped[str] = mapped_column(
@@ -193,6 +205,7 @@ class Memory(IdMixin, TimestampMixin, Base):
         CheckConstraint("kind IN ('preference', 'fact', 'project', 'note')", name="kind"),
         CheckConstraint("source IN ('user', 'chat', 'task')", name="source"),
         Index("ix_memories_search", "search", postgresql_using="gin"),
+        Index("ix_memories_user_project", "user_id", "project"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -204,6 +217,9 @@ class Memory(IdMixin, TimestampMixin, Base):
     # Private memories are only used in private (local-AI-only) conversations.
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Optional project tag: recalled only in that project's conversations
+    # (and in conversations without a project).
+    project: Mapped[str | None] = mapped_column(String(80))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     search: Mapped[str] = mapped_column(
         TSVECTOR, Computed("to_tsvector('english', content)", persisted=True)

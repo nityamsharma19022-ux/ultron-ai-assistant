@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 
-from ultron_core import __version__, activity, modes, notifications, pairing
+from ultron_core import __version__, activity, backup, modes, notifications, pairing
 from ultron_core.ai import api as ai_api
 from ultron_core.ai.cooldown import CooldownStore
 from ultron_core.ai.providers.base import ChatProvider
@@ -123,6 +123,7 @@ def create_app(
     app.include_router(pairing.router, prefix="/api/v1")
     app.include_router(modes.router, prefix="/api/v1")
     app.include_router(notifications.router, prefix="/api/v1")
+    app.include_router(backup.router, prefix="/api/v1")
     app.include_router(activity.router, prefix="/api/v1")
     app.include_router(tasks_router.router, prefix="/api/v1")
     app.include_router(agents_router.router, prefix="/api/v1")

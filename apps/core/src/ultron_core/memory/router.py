@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ultron_core import activity
+from ultron_core.chat.schemas import clean_project
 from ultron_core.db.models import Memory
 from ultron_core.deps import PrincipalDep, SessionDep, SettingsDep
 from ultron_core.memory import service
@@ -39,8 +40,10 @@ class MemoryCreate(BaseModel):
     kind: Kind = "note"
     pinned: bool = False
     is_private: bool = False
+    project: str | None = Field(default=None, max_length=80)
 
     _clean = field_validator("content")(_clean)
+    _project = field_validator("project")(clean_project)
 
 
 class MemoryUpdate(BaseModel):
@@ -50,6 +53,13 @@ class MemoryUpdate(BaseModel):
     kind: Kind | None = None
     pinned: bool | None = None
     is_private: bool | None = None
+    # None keeps the project; "" removes it.
+    project: str | None = Field(default=None, max_length=80)
+
+    @field_validator("project")
+    @classmethod
+    def _clean_project(cls, value: str | None) -> str | None:
+        return None if value is None else (clean_project(value) or "")
 
     @field_validator("content")
     @classmethod
@@ -66,6 +76,7 @@ class MemoryOut(BaseModel):
     source: str
     is_private: bool
     pinned: bool
+    project: str | None = None
     last_used_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -85,11 +96,18 @@ async def list_memories(
     session: SessionDep,
     q: str | None = Query(default=None, max_length=200),
     kind: Kind | None = None,
+    project: str | None = Query(default=None, max_length=80),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=100_000),
 ) -> list[MemoryOut]:
     rows = await service.search(
-        session, principal.user, query=q, kind=kind, limit=limit, offset=offset
+        session,
+        principal.user,
+        query=q,
+        kind=kind,
+        project=project,
+        limit=limit,
+        offset=offset,
     )
     return [MemoryOut.model_validate(m) for m in rows]
 
@@ -106,6 +124,7 @@ async def create_memory(
         kind=body.kind,
         pinned=body.pinned,
         is_private=body.is_private,
+        project=body.project,
         source="user",
     )
     session.add(memory)
@@ -148,6 +167,8 @@ async def update_memory(
         value = getattr(body, field)
         if value is not None:
             setattr(memory, field, value)
+    if body.project is not None:
+        memory.project = body.project or None
     activity.record(
         session,
         principal.user.id,

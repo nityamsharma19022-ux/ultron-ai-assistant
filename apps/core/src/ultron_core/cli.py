@@ -124,6 +124,48 @@ def _tls_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _export(args: argparse.Namespace) -> int:
+    import json
+
+    from sqlalchemy import select
+
+    from ultron_core.backup import export_user
+    from ultron_core.db.models import User
+    from ultron_core.db.session import create_engine, create_sessionmaker
+
+    async def run() -> dict | None:  # type: ignore[type-arg]
+        engine = create_engine(get_settings())
+        try:
+            async with create_sessionmaker(engine)() as session:
+                user = await session.scalar(
+                    select(User).where(User.email == args.email.strip().lower())
+                )
+                if user is None:
+                    return None
+                return await export_user(session, user, include_private=args.include_private)
+        finally:
+            await engine.dispose()
+
+    data = asyncio.run(run())
+    if data is None:
+        print(f"No user with email {args.email}", file=sys.stderr)
+        return 1
+    text = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+    if args.out == "-":
+        print(text)
+    else:
+        from pathlib import Path
+
+        path = Path(args.out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(
+            f"Exported {len(data['conversations'])} conversations, "
+            f"{len(data['memories'])} memories, {len(data['tasks'])} tasks to {path}"
+        )
+    return 0
+
+
 def _healthcheck(args: argparse.Namespace) -> int:
     """Container health check (works with and without HTTPS)."""
     import ssl
@@ -167,6 +209,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=_tls_init)
+
+    p = sub.add_parser("export", help="write a JSON copy of a user's ULTRON data")
+    p.add_argument("--email", required=True)
+    p.add_argument("--out", default="-", help="file path, or - for standard output")
+    p.add_argument("--include-private", action="store_true")
+    p.set_defaults(func=_export)
 
     p = sub.add_parser("healthcheck")
     p.add_argument("--port", type=int, default=8000)

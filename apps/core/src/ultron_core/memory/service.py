@@ -69,6 +69,7 @@ async def search(
     *,
     query: str | None = None,
     kind: str | None = None,
+    project: str | None = None,
     include_private: bool = True,
     limit: int = 50,
     offset: int = 0,
@@ -76,6 +77,8 @@ async def search(
     stmt = select(Memory).where(Memory.user_id == user.id)
     if kind:
         stmt = stmt.where(Memory.kind == kind)
+    if project:
+        stmt = stmt.where(func.lower(Memory.project) == project.lower())
     if not include_private:
         stmt = stmt.where(Memory.is_private.is_(False))
     tsq = tsquery_text(query) if query else None
@@ -96,14 +99,27 @@ def _escape_like(text: str) -> str:
 
 
 async def recall(
-    session: AsyncSession, user: User, message: str, *, private: bool, limit: int
+    session: AsyncSession,
+    user: User,
+    message: str,
+    *,
+    private: bool,
+    limit: int,
+    project: str | None = None,
 ) -> list[Memory]:
-    """Memories to give the AI for this message: pinned first, then matches."""
+    """Memories to give the AI for this message: pinned first, then matches.
+
+    In a project's conversation, other projects' memories are left out
+    (general memories without a project are always available)."""
     if limit <= 0:
         return []
     base = select(Memory).where(Memory.user_id == user.id)
     if not private:
         base = base.where(Memory.is_private.is_(False))
+    if project:
+        base = base.where(
+            or_(Memory.project.is_(None), func.lower(Memory.project) == project.lower())
+        )
     pinned = list(
         await session.scalars(
             base.where(Memory.pinned.is_(True)).order_by(Memory.updated_at.desc()).limit(limit)

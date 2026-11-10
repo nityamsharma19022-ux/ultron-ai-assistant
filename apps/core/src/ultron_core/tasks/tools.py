@@ -58,6 +58,7 @@ class NoArgs(ToolArgs):
 class MemorySaveArgs(ToolArgs):
     content: str = Field(min_length=1, max_length=2000)
     kind: Literal["preference", "fact", "project", "note"] = "note"
+    project: str | None = Field(default=None, max_length=80)
 
 
 class MemorySearchArgs(ToolArgs):

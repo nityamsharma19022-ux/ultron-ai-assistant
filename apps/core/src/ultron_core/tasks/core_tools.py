@@ -63,7 +63,13 @@ async def run(name: str, args: tools.ToolArgs, ctx: CoreContext) -> dict[str, An
 
 
 async def _memory_save(args: tools.MemorySaveArgs, ctx: CoreContext) -> dict[str, Any]:
+    from ultron_core.db.models import UserAIPreferences
+
+    prefs = await ctx.session.get(UserAIPreferences, ctx.task.user_id)
+    if prefs is not None and prefs.memory_saving_paused:
+        raise ToolError("Memory saving is paused. Resume it in Memory settings to save this.")
     memory = Memory(
+        project=(" ".join(args.project.split()) or None) if args.project else None,
         user_id=ctx.task.user_id,
         content=args.content,
         kind=args.kind,

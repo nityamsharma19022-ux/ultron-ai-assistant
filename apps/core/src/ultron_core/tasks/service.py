@@ -94,6 +94,9 @@ async def create_task(
         device_id=principal.device.id,
         detail={"steps": len(plan.steps), "source": plan.source},
     )
+    from ultron_core import safety
+
+    await safety.after_create(session, principal.user.id)
     await session.commit()
     return task
 

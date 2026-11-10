@@ -22,10 +22,20 @@ def _clean_text(value: str) -> str:
     return value.strip()
 
 
+def clean_project(value: str | None) -> str | None:
+    """Project tags: trimmed, single spaces; empty means "no project"."""
+    if value is None:
+        return None
+    return " ".join(_clean_text(value).split()) or None
+
+
 class ConversationCreate(_Strict):
     title: str | None = Field(default=None, max_length=200)
     # None = use the user's "private by default" preference.
     is_private: bool | None = None
+    project: str | None = Field(default=None, max_length=80)
+
+    _project = field_validator("project")(clean_project)
 
     @field_validator("title")
     @classmethod
@@ -37,6 +47,13 @@ class ConversationUpdate(_Strict):
     title: str | None = Field(default=None, max_length=200)
     # Privacy can be switched on but never off.
     is_private: Literal[True] | None = None
+    # None keeps the project; "" removes it.
+    project: str | None = Field(default=None, max_length=80)
+
+    @field_validator("project")
+    @classmethod
+    def _project(cls, v: str | None) -> str | None:
+        return None if v is None else " ".join(_clean_text(v).split())
 
     @field_validator("title")
     @classmethod
@@ -50,8 +67,20 @@ class ConversationOut(BaseModel):
     id: uuid.UUID
     title: str | None
     is_private: bool
+    project: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class SearchHit(BaseModel):
+    conversation_id: uuid.UUID
+    conversation_title: str | None
+    is_private: bool
+    project: str | None
+    message_id: uuid.UUID
+    role: str
+    snippet: str
+    created_at: datetime
 
 
 class MessageCreate(_Strict):
@@ -101,6 +130,7 @@ class PreferencesIn(_Strict):
     private_by_default: bool = False
     # None keeps the current value (older apps don't send it).
     memory_enabled: bool | None = None
+    memory_saving_paused: bool | None = None
 
 
 class PreferencesOut(BaseModel):
@@ -108,6 +138,7 @@ class PreferencesOut(BaseModel):
     cloud_order: list[str]
     private_by_default: bool
     memory_enabled: bool
+    memory_saving_paused: bool = False
     available_cloud_providers: list[str]
 
 

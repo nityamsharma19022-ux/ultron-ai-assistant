@@ -25,6 +25,7 @@ from ultron_core.chat.schemas import (
     ConversationUpdate,
     MessageCreate,
     MessageOut,
+    SearchHit,
     SendMessageResult,
 )
 from ultron_core.db.models import Conversation
@@ -61,7 +62,9 @@ async def create_conversation(
         is_private = (await service.get_preferences(session, principal.user)).private_by_default
     if is_private and not settings.private_conversations_allowed:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=PRIVATE_NOT_ALLOWED)
-    conversation = Conversation(user_id=principal.user.id, title=body.title, is_private=is_private)
+    conversation = Conversation(
+        user_id=principal.user.id, title=body.title, is_private=is_private, project=body.project
+    )
     session.add(conversation)
     await session.commit()
     return ConversationOut.model_validate(conversation)
@@ -76,6 +79,30 @@ async def list_conversations(
 ) -> list[ConversationOut]:
     rows = await service.list_conversations(session, principal.user, limit=limit, offset=offset)
     return [ConversationOut.model_validate(c) for c in rows]
+
+
+@router.get("/search", response_model=list[SearchHit])
+async def search_conversations(
+    principal: PrincipalDep,
+    session: SessionDep,
+    q: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=30, ge=1, le=100),
+) -> list[SearchHit]:
+    """Full-text search across all of your past conversations."""
+    rows = await service.search_messages(session, principal.user, q, limit=limit)
+    return [
+        SearchHit(
+            conversation_id=c.id,
+            conversation_title=c.title,
+            is_private=c.is_private,
+            project=c.project,
+            message_id=m.id,
+            role=m.role,
+            snippet=snippet,
+            created_at=m.created_at,
+        )
+        for m, c, snippet in rows
+    ]
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetail)
@@ -108,6 +135,8 @@ async def update_conversation(
         conversation.title = body.title
     if body.is_private:
         conversation.is_private = True
+    if "project" in body.model_fields_set and body.project is not None:
+        conversation.project = body.project or None
     await session.commit()
     return ConversationOut.model_validate(conversation)
 
@@ -221,6 +250,7 @@ async def send_message(
                 body.content,
                 private=conversation.is_private,
                 limit=settings.memory_context_limit,
+                project=conversation.project,
             )
             if memory_on
             else []

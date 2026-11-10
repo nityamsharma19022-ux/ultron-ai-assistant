@@ -41,6 +41,36 @@ async def list_conversations(
     return list(result)
 
 
+async def search_messages(
+    session: AsyncSession, user: User, query: str, *, limit: int
+) -> list[tuple[Message, Conversation, str]]:
+    """Past messages matching ``query`` (full-text, best matches first)."""
+    from ultron_core.memory.service import TS_CONFIG, tsquery_text
+
+    tsq = tsquery_text(query)
+    if tsq is None:
+        return []
+    q = func.to_tsquery(TS_CONFIG, tsq)
+    snippet = func.ts_headline(
+        TS_CONFIG,
+        Message.content,
+        q,
+        "MaxWords=30, MinWords=10, MaxFragments=2, StartSel=«, StopSel=»",
+    )
+    rows = await session.execute(
+        select(Message, Conversation, snippet)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .where(
+            Conversation.user_id == user.id,
+            Conversation.deleted_at.is_(None),
+            Message.search.op("@@")(q),
+        )
+        .order_by(func.ts_rank(Message.search, q).desc(), Message.seq.desc())
+        .limit(limit)
+    )
+    return [(m, c, s) for m, c, s in rows.all()]
+
+
 async def list_messages(
     session: AsyncSession, conversation: Conversation, *, limit: int
 ) -> list[Message]:
@@ -72,6 +102,7 @@ async def get_preferences(session: AsyncSession, user: User) -> UserAIPreference
             cloud_order=[],
             private_by_default=False,
             memory_enabled=True,
+            memory_saving_paused=False,
             active_mode="normal",
         )
     return prefs
