@@ -57,6 +57,8 @@ class ConversationOut(BaseModel):
 class MessageCreate(_Strict):
     content: str = Field(min_length=1, max_length=ABSOLUTE_MAX_MESSAGE_CHARS)
     stream: bool = False
+    # Documents to answer from (their relevant parts are given to the AI).
+    document_ids: list[uuid.UUID] = Field(default_factory=list, max_length=5)
 
     @field_validator("content")
     @classmethod

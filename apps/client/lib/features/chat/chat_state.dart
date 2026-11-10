@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/api/task_models.dart';
 import '../../core/api/models.dart';
 
 /// What ULTRON is doing for the current reply (drives loading UI and the
@@ -33,6 +34,7 @@ class ChatState {
     this.phaseKind,
     this.phaseModel,
     this.newChatPrivate = false,
+    this.attachments = const [],
   });
 
   /// Null for a new, not yet started conversation.
@@ -47,6 +49,9 @@ class ChatState {
 
   /// Privacy chosen for a new conversation before its first message.
   final bool newChatPrivate;
+
+  /// Documents the AI answers from (kept for follow-up questions).
+  final List<DocumentInfo> attachments;
 
   bool get isPrivate => conversation?.isPrivate ?? newChatPrivate;
   bool get busy => phase.busy;
@@ -63,6 +68,7 @@ class ChatState {
     String? phaseKind,
     String? phaseModel,
     bool? newChatPrivate,
+    List<DocumentInfo>? attachments,
   }) => ChatState(
     conversation: clearConversation ? null : (conversation ?? this.conversation),
     messages: messages ?? this.messages,
@@ -73,6 +79,7 @@ class ChatState {
     phaseKind: phase == ReplyPhase.idle ? null : (phaseKind ?? this.phaseKind),
     phaseModel: phase == ReplyPhase.idle ? null : (phaseModel ?? this.phaseModel),
     newChatPrivate: newChatPrivate ?? this.newChatPrivate,
+    attachments: attachments ?? this.attachments,
   );
 }
 

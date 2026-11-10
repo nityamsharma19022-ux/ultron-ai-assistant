@@ -25,6 +25,7 @@ from ultron_core.chat.service import mark_stale_generations_failed
 from ultron_core.config import Settings, get_settings
 from ultron_core.db.migrate import head_revision
 from ultron_core.db.session import create_engine, create_sessionmaker
+from ultron_core.documents import router as documents_router
 from ultron_core.logging_setup import configure_logging, get_logger
 from ultron_core.memory import router as memory_router
 from ultron_core.middleware import RequestContextMiddleware
@@ -116,6 +117,7 @@ def create_app(
     app.include_router(chat_router.router, prefix="/api/v1")
     app.include_router(ai_api.router, prefix="/api/v1")
     app.include_router(memory_router.router, prefix="/api/v1")
+    app.include_router(documents_router.router, prefix="/api/v1")
     app.include_router(activity.router, prefix="/api/v1")
     app.include_router(tasks_router.router, prefix="/api/v1")
     app.include_router(agents_router.router, prefix="/api/v1")

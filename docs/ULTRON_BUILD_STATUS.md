@@ -20,7 +20,7 @@ Ollama.
 | 3 | Task engine, permissions, agents protocol | ✅ Backend done and tested |
 | 4 | Windows desktop agent | ✅ Built; E2E verified on Linux; Windows run pending |
 | 5 | Android system assistant | ✅ Built, APK compiles; phone test pending |
-| 6 | Files and multimodal | ⏳ |
+| 6 | Files and multimodal | ✅ Documents (PDF, DOCX, XLSX, text); images/audio not yet |
 | 7 | Pairing and secure transport | ⏳ |
 | — | Control Center screens for the above | ✅ Tasks, Permissions, Activity, Memory, Agents, Assistant |
 | 8 | QA, docs, release report | ⏳ |
@@ -147,6 +147,28 @@ Ollama.
   phone agent starting during provider build, and timers left by the agent
   loop.
 
+## Stage 6 — Files and documents
+- Core: `POST /api/v1/documents` (multipart, 20 MB default limit),
+  list, search, preview, delete. Text extraction for PDF (text layer),
+  DOCX (with tables), XLSX (sheets as CSV), text/Markdown/CSV/JSON/code.
+  Overlapping chunks with PostgreSQL full-text search. Same file uploaded
+  again (SHA-256) is reused, not processed again. Migration `0005`.
+- Chat: messages can carry `document_ids`; the relevant parts are given to
+  the AI inside a `<<<DOCUMENTS … DOCUMENTS>>>` block with the rule that
+  text inside documents is information, never instructions. Private
+  documents only work in private (local-AI) conversations.
+- Tasks: `docs.search` and `docs.read` tools; e.g. read a document and
+  have `ai.write` summarise it (the source goes in a data block too).
+- App: Memory section now has a **Documents** tab (upload, private flag,
+  list, "Ask about it", delete); paperclip in the chat box to attach
+  documents; attachments shown as chips and kept for follow-up questions.
+- **Not supported yet (said in the app and the API):** images and scanned
+  PDFs (no OCR/vision model), audio files (no server transcription; speech
+  is turned into text on the device). Embedding/vector search (pgvector)
+  is not used yet; search is PostgreSQL full-text.
+- Tests: backend `tests/test_documents.py` (8, with real generated PDF,
+  DOCX and XLSX files); app `test/features/documents_test.dart` (3).
+
 ## Bugs found by the end-to-end run and fixed
 - **Agent long poll returned HTTP 500** when there was no work and it
   waited more than one round (expired ORM objects lazy-loading in async).
@@ -155,8 +177,8 @@ Ollama.
   and replacing `expire_all()` with targeted refreshes.
 
 ## Test results (latest run, 2026-11-10)
-- Backend: **192 passed, 11 skipped** (live Ollama tests), ruff clean.
-- App: **93 passed**, `flutter analyze` clean, release APK builds.
+- Backend: **199 passed, 11 skipped** (live Ollama tests), ruff clean.
+- App: **96 passed**, `flutter analyze` clean, release APK builds.
 - Agent: 29 passed (+1 Windows-only, runs in CI).
 
 ## Known bugs

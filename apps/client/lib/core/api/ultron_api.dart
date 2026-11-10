@@ -277,6 +277,36 @@ class UltronApi {
 
   Future<void> deleteAllMemories() => _json('DELETE', '/api/v1/memories', query: {'confirm': 'delete-all'});
 
+  // --------------------------------------------------------- documents
+
+  Future<List<DocumentInfo>> documents() async => [
+    for (final d in await _json('GET', '/api/v1/documents') as List) DocumentInfo.fromJson(d as Map<String, dynamic>),
+  ];
+
+  Future<void> deleteDocument(String id) => _json('DELETE', '/api/v1/documents/$id', expectBody: false);
+
+  /// Uploads a file; ULTRON Core extracts and indexes its text.
+  Future<DocumentInfo> uploadDocument(String name, List<int> bytes, {bool private = false, bool retry = true}) async {
+    final request = http.MultipartRequest('POST', _uri('/api/v1/documents'))
+      ..headers.addAll(await _headers())
+      ..fields['is_private'] = '$private'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: name));
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await _client.send(request)).timeout(const Duration(minutes: 3));
+    } on TimeoutException {
+      throw const ApiException.network('The upload took too long.');
+    } on http.ClientException {
+      throw const ApiException.network();
+    }
+    if (response.statusCode == 401 && retry && await _refresh()) {
+      return uploadDocument(name, bytes, private: private, retry: false);
+    }
+    final text = utf8.decode(response.bodyBytes);
+    if (response.statusCode >= 400) throw _error(response.statusCode, text);
+    return DocumentInfo.fromJson(jsonDecode(text) as Map<String, dynamic>);
+  }
+
   // ------------------------------------------------------------ agents
 
   Future<List<AgentStatus>> agents() async => [
@@ -333,10 +363,15 @@ class UltronApi {
 
   /// Sends a message and streams the reply. Cancelling the subscription (or
   /// completing [abort]) closes the connection; the server then stops.
-  Stream<ChatStreamEvent> sendMessage(String conversationId, String content, {Future<void>? abort}) async* {
+  Stream<ChatStreamEvent> sendMessage(
+    String conversationId,
+    String content, {
+    Future<void>? abort,
+    List<String> documentIds = const [],
+  }) async* {
     final response = await _sendStreaming(
       _uri('/api/v1/conversations/$conversationId/messages'),
-      jsonEncode({'content': content, 'stream': true}),
+      jsonEncode({'content': content, 'stream': true, if (documentIds.isNotEmpty) 'document_ids': documentIds}),
       abort,
     );
     final bytes = withIdleTimeout<List<int>>(

@@ -420,3 +420,45 @@ class Schedule(IdMixin, TimestampMixin, Base):
     next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_task_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+
+
+# --- Stage 6: documents -------------------------------------------------------
+
+
+class Document(IdMixin, TimestampMixin, Base):
+    """An uploaded file whose text ULTRON can search and use."""
+
+    __tablename__ = "documents"
+    __table_args__ = (Index("ix_documents_user_sha", "user_id", "sha256", unique=True),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # pdf, docx, text, sheet
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    pages: Mapped[int | None] = mapped_column(Integer)
+    chars: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Private documents are only used with local AI (private conversations).
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="upload")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (Index("ix_document_chunks_search", "search", postgresql_using="gin"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    search: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
+    )

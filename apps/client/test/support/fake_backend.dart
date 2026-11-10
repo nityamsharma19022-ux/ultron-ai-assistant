@@ -14,6 +14,7 @@ import 'package:ultron_app/core/providers.dart';
 import 'package:ultron_app/core/settings/app_settings.dart';
 import 'package:ultron_app/features/shell/sections.dart';
 import 'package:ultron_app/core/platform/native.dart';
+import 'package:ultron_app/features/documents/documents.dart';
 import 'package:ultron_app/features/voice/speech_engines.dart';
 import 'package:ultron_app/features/voice/voice_controller.dart';
 
@@ -38,7 +39,13 @@ class FakeBackend {
   late final http.Client client = MockClient.streaming((request, bodyStream) async {
     final body = await bodyStream.bytesToString();
     requests.add(request);
-    bodies['${request.method} ${request.url.path}'] = body.isEmpty ? null : jsonDecode(body);
+    Object? decoded;
+    try {
+      decoded = body.isEmpty ? null : jsonDecode(body);
+    } on FormatException {
+      decoded = body; // multipart uploads
+    }
+    bodies['${request.method} ${request.url.path}'] = decoded;
     if (!online) throw http.ClientException('Connection refused', request.url);
     final key = '${request.method} ${request.url.path}';
     final custom = routes[key];
@@ -155,6 +162,8 @@ class FakeBackend {
   bool automationStopped = false;
   final grants = <String>{};
   final commands = <String>[];
+  final documents = <Map<String, dynamic>>[];
+  final uploads = <String>[];
 
   /// How /assistant/command answers; default: a completed one-step task.
   Map<String, dynamic> Function(String text) commandReply = (text) => {
@@ -288,7 +297,32 @@ class FakeBackend {
       stepResults[result.group(1)!] = b();
       return ok({'cancel': false});
     }
+    final document = RegExp(r'^/api/v1/documents/([^/]+)$').firstMatch(path);
+    if (document != null && r.method == 'DELETE') {
+      documents.removeWhere((d) => d['id'] == document.group(1));
+      return Future.value(http.StreamedResponse(const Stream.empty(), 204));
+    }
     switch (key) {
+      case 'GET /api/v1/documents':
+        return ok(documents);
+      case 'POST /api/v1/documents':
+        final name = RegExp(r'filename="([^"]+)"').firstMatch(body)?.group(1) ?? 'file';
+        uploads.add(name);
+        final d = {
+          'id': 'doc-${documents.length + 1}',
+          'name': name,
+          'kind': name.endsWith('.pdf') ? 'pdf' : 'text',
+          'size': 2048,
+          'pages': name.endsWith('.pdf') ? 3 : null,
+          'chars': 900,
+          'chunk_count': 2,
+          'is_private': body.contains('name="is_private"\r\n\r\ntrue'),
+          'source': 'upload',
+          'created_at': '2026-11-10T10:00:00Z',
+          'reused': false,
+        };
+        documents.insert(0, d);
+        return ok(d, 201);
       case 'POST /api/v1/assistant/command':
         final text = b()['text'] as String;
         commands.add(text);
@@ -615,6 +649,7 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   SpeechOutput? speechOutput,
   AssistantPlatform? assistantPlatform,
   PhonePlatform? phonePlatform,
+  FileSource? fileSource,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -638,6 +673,7 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
         speechOutputProvider.overrideWithValue(speechOutput ?? FakeSpeechOutput()),
         assistantPlatformProvider.overrideWithValue(assistantPlatform ?? const NoAssistantPlatform()),
         phonePlatformProvider.overrideWithValue(phonePlatform ?? const NoPhonePlatform()),
+        fileSourceProvider.overrideWithValue(fileSource ?? const _NoFiles()),
       ],
       child: UltronApp(pages: pages),
     ),
@@ -646,4 +682,10 @@ Future<({ProviderContainer container, MemoryTokenStore tokens})> pumpUltron(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
   return (container: container, tokens: tokens);
+}
+
+class _NoFiles implements FileSource {
+  const _NoFiles();
+  @override
+  Future<PickedFile?> pick() async => null;
 }

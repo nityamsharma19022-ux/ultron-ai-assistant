@@ -78,6 +78,15 @@ class ReminderArgs(ToolArgs):
     in_minutes: int | None = Field(default=None, ge=1, le=60 * 24 * 366)
 
 
+class DocSearchArgs(ToolArgs):
+    query: str = Field(min_length=1, max_length=300)
+
+
+class DocReadArgs(ToolArgs):
+    # A document's id or (part of) its name.
+    document: str = Field(min_length=1, max_length=255)
+
+
 class AppArgs(ToolArgs):
     app: str = Field(min_length=1, max_length=100)
 
@@ -208,6 +217,25 @@ _SPECS: list[ToolSpec] = [
         "model's own knowledge; it cannot browse the web. Result: {text}.",
         lambda a: f"Write a {a.kind}: {a.instructions[:80]}",
         max_attempts=2,
+    ),
+    ToolSpec(
+        "docs.search",
+        "core",
+        "docs.read",
+        "A",
+        DocSearchArgs,
+        "Search the user's uploaded documents. Result: {text} with matching passages.",
+        lambda a: f"Search your documents for '{a.query}'",
+    ),
+    ToolSpec(
+        "docs.read",
+        "core",
+        "docs.read",
+        "A",
+        DocReadArgs,
+        "Read one uploaded document (by name or id). Result: {text}. Use with ai.write "
+        "source_step to summarise or analyse it.",
+        lambda a: f"Read the document '{a.document}'",
     ),
     ToolSpec(
         "reminders.create",
@@ -398,6 +426,7 @@ SCOPES: dict[str, str] = {
     "memory.read": "Search memories",
     "ai.write": "Write documents, plans and reports with AI",
     "reminders": "Create reminders",
+    "docs.read": "Search and read your uploaded documents",
     "pc.system": "Read PC status",
     "pc.apps": "Open and switch apps on the PC",
     "pc.files.read": "Search and read files in allowed PC folders",

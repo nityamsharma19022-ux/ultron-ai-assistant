@@ -11,6 +11,7 @@ import '../../core/auth/session.dart';
 import '../../core/providers.dart';
 import '../../core/theme/ultron_colors.dart';
 import '../../widgets/glass_panel.dart';
+import '../documents/documents.dart';
 import '../settings/ai_preferences_controller.dart';
 
 const memoryKinds = {'preference': 'Preference', 'fact': 'Fact', 'project': 'Project', 'note': 'Note'};
@@ -343,4 +344,25 @@ class _MemoryTile extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The Memory section: what ULTRON remembers, and your documents.
+class KnowledgePage extends StatelessWidget {
+  const KnowledgePage({super.key});
+
+  @override
+  Widget build(BuildContext context) => const DefaultTabController(
+    length: 2,
+    child: Column(
+      children: [
+        TabBar(
+          tabs: [
+            Tab(key: Key('tab-memories'), text: 'Memories'),
+            Tab(key: Key('tab-documents'), text: 'Documents'),
+          ],
+        ),
+        Expanded(child: TabBarView(children: [MemoryPage(), DocumentsTab()])),
+      ],
+    ),
+  );
 }

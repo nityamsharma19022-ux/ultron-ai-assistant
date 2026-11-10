@@ -13,6 +13,7 @@ from ultron_core.ai.router import AIRouter, Completed, RoutingError, RoutingPref
 from ultron_core.ai.types import ChatMessage, ChatRequest, TextDelta
 from ultron_core.config import Settings
 from ultron_core.db.models import Memory, Reminder, Task
+from ultron_core.documents import service as document_service
 from ultron_core.memory import service as memory_service
 from ultron_core.tasks import tools
 from ultron_core.tasks.tools import ToolError
@@ -51,6 +52,10 @@ async def run(name: str, args: tools.ToolArgs, ctx: CoreContext) -> dict[str, An
         return await _ai_write(args, ctx)  # type: ignore[arg-type]
     if name == "reminders.create":
         return await _reminder(args, ctx)  # type: ignore[arg-type]
+    if name == "docs.search":
+        return await _docs_search(args, ctx)  # type: ignore[arg-type]
+    if name == "docs.read":
+        return await _docs_read(args, ctx)  # type: ignore[arg-type]
     raise ToolError(f"No Core implementation for {name}")
 
 
@@ -132,3 +137,27 @@ async def _reminder(args: tools.ReminderArgs, ctx: CoreContext) -> dict[str, Any
         "summary": f"Reminder set for {due.isoformat(timespec='minutes')}",
         "verified": True,
     }
+
+
+async def _docs_search(args: tools.DocSearchArgs, ctx: CoreContext) -> dict[str, Any]:
+    hits = await document_service.search(
+        ctx.session, ctx.task.user_id, args.query, include_private=ctx.task.is_private, limit=8
+    )
+    text = "\n\n".join(f"[{d.name}, part {c.idx + 1}]\n{c.text}" for d, c in hits)
+    names = sorted({d.name for d, _ in hits})
+    return {
+        "text": text,
+        "documents": names,
+        "summary": f"Found {len(hits)} passages in {len(names)} documents",
+    }
+
+
+async def _docs_read(args: tools.DocReadArgs, ctx: CoreContext) -> dict[str, Any]:
+    try:
+        doc = await document_service.find(
+            ctx.session, ctx.task.user_id, args.document, include_private=ctx.task.is_private
+        )
+    except document_service.DocumentNotFoundError:
+        raise ToolError(f"No document matching '{args.document}'") from None
+    text = await document_service.full_text(ctx.session, doc)
+    return {"text": text, "document": doc.name, "summary": f"Read {doc.name}", "verified": True}

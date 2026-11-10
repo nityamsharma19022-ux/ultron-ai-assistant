@@ -146,6 +146,8 @@ class Settings(BaseSettings):
     task_step_timeout_minutes: int = Field(default=15, ge=1, le=24 * 60)
     # How long POST /assistant/command waits for a task to finish.
     assistant_wait_seconds: float = Field(default=20, ge=0, le=120)
+    # Largest file accepted by POST /documents.
+    document_max_mb: int = Field(default=20, ge=1, le=200)
 
     @model_validator(mode="after")
     def _validate(self) -> Settings:

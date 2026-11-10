@@ -7,6 +7,7 @@ import 'core/theme/ultron_theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/chat/chat_page.dart';
 import 'features/dashboard/dashboard_page.dart';
+import 'features/documents/documents.dart';
 import 'features/memory/memory_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shell/app_shell.dart';
@@ -50,10 +51,10 @@ Map<AppSection, Widget> defaultPages() => {
   AppSection.chat: ChatPage(
     heroBuilder: (context, state, size) => ChatVisualizer(size: size),
     headerOrbBuilder: (context, state, size) => ChatVisualizer(size: size),
-    composerLeading: const VoiceButton(),
+    composerLeading: const Row(mainAxisSize: MainAxisSize.min, children: [AttachButton(), VoiceButton()]),
   ),
   AppSection.tasks: const TasksPage(),
-  AppSection.memory: const MemoryPage(),
+  AppSection.memory: const KnowledgePage(),
   AppSection.dashboard: const DashboardPage(),
   AppSection.settings: const SettingsPage(),
 };

@@ -7,6 +7,7 @@ import '../../core/api/models.dart';
 import '../../core/api/ultron_api.dart';
 import '../../core/auth/session.dart';
 import '../../core/providers.dart';
+import '../../core/api/task_models.dart';
 import 'chat_state.dart';
 
 /// Conversation list (newest first).
@@ -66,6 +67,19 @@ class ChatController extends Notifier<ChatState> {
     _stopStreaming();
     state = ChatState(newChatPrivate: private ?? _privateDefault);
   }
+
+  /// Answer from this document in the next messages.
+  void attach(DocumentInfo document) {
+    if (state.attachments.any((d) => d.id == document.id) || state.attachments.length >= 5) return;
+    state = state.copyWith(attachments: [...state.attachments, document]);
+  }
+
+  void detach(String documentId) => state = state.copyWith(
+    attachments: [
+      for (final d in state.attachments)
+        if (d.id != documentId) d,
+    ],
+  );
 
   /// Applies the "private by default" preference to a fresh, empty chat.
   void applyPrivateDefault(bool value) {
@@ -153,7 +167,12 @@ class ChatController extends Notifier<ChatState> {
     final abort = _abort = Completer<void>();
     final done = Completer<void>();
     _sub = _api
-        .sendMessage(conversation.id, content, abort: abort.future)
+        .sendMessage(
+          conversation.id,
+          content,
+          abort: abort.future,
+          documentIds: [for (final d in state.attachments) d.id],
+        )
         .listen(
           (event) {
             switch (event) {

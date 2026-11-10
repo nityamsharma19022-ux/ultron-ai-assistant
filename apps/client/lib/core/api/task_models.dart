@@ -264,3 +264,43 @@ class ReminderItem {
   final DateTime dueAt;
   final bool done;
 }
+
+class DocumentInfo {
+  const DocumentInfo({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.size,
+    required this.chunkCount,
+    required this.isPrivate,
+    required this.createdAt,
+    this.pages,
+    this.reused = false,
+  });
+  factory DocumentInfo.fromJson(Map<String, dynamic> j) => DocumentInfo(
+    id: j['id'] as String,
+    name: j['name'] as String? ?? 'document',
+    kind: j['kind'] as String? ?? 'text',
+    size: j['size'] as int? ?? 0,
+    pages: j['pages'] as int?,
+    chunkCount: j['chunk_count'] as int? ?? 0,
+    isPrivate: j['is_private'] as bool? ?? false,
+    reused: j['reused'] as bool? ?? false,
+    createdAt: _date(j['created_at']),
+  );
+  final String id;
+  final String name;
+  final String kind; // pdf | docx | sheet | text
+  final int size;
+  final int? pages;
+  final int chunkCount;
+  final bool isPrivate;
+  final bool reused;
+  final DateTime createdAt;
+
+  String get sizeLabel => size >= 1 << 20
+      ? '${(size / (1 << 20)).toStringAsFixed(1)} MB'
+      : size >= 1024
+      ? '${(size / 1024).toStringAsFixed(0)} KB'
+      : '$size B';
+}

@@ -27,6 +27,7 @@ from ultron_core.chat.schemas import (
 )
 from ultron_core.db.models import Conversation
 from ultron_core.deps import PrincipalDep, RedisDep, SessionDep, SettingsDep
+from ultron_core.documents import service as document_service
 from ultron_core.memory import service as memory_service
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
@@ -176,6 +177,19 @@ async def send_message(
             headers={"Retry-After": "60"},
         )
 
+    attached = []
+    for document_id in dict.fromkeys(body.document_ids):
+        try:
+            doc = await document_service.get(session, principal.user.id, document_id)
+        except document_service.DocumentNotFoundError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Document not found") from None
+        if doc.is_private and not conversation.is_private:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail="A private document can only be used in a private conversation.",
+            )
+        attached.append(doc.id)
+
     manager: GenerationManager = request.app.state.generations
     try:
         active = manager.reserve(conversation.id, principal.user.id)
@@ -203,6 +217,17 @@ async def send_message(
             if memory_on
             else []
         )
+        excerpts = (
+            await document_service.search(
+                session,
+                principal.user.id,
+                body.content,
+                document_ids=attached,
+                include_private=conversation.is_private,
+            )
+            if attached
+            else []
+        )
     except BaseException:
         manager.release(conversation.id)
         raise
@@ -215,7 +240,9 @@ async def send_message(
         history=history,
         settings=settings,
         sessionmaker=request.app.state.sessionmaker,
-        system=SYSTEM_PROMPT + memory_service.context_block(recalled),
+        system=SYSTEM_PROMPT
+        + memory_service.context_block(recalled)
+        + document_service.context_block(excerpts),
     )
 
     created = {
@@ -223,6 +250,7 @@ async def send_message(
         "assistant_message_id": str(assistant_message.id),
         "private": conversation.is_private,
         "memories_used": len(recalled),
+        "document_parts_used": len(excerpts),
     }
     if body.stream:
         return StreamingResponse(

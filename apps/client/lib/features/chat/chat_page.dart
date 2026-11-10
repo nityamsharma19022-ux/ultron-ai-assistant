@@ -12,6 +12,7 @@ import 'composer.dart';
 import 'conversation_list.dart';
 import 'message_bubble.dart';
 import '../voice/voice_controls.dart';
+import '../documents/documents.dart';
 import 'phase_indicator.dart';
 
 /// Builds the large visualizer shown above an empty conversation; replaced
@@ -105,6 +106,7 @@ class _ChatView extends ConsumerWidget {
               ),
               PhaseIndicator(state: state),
               const SizedBox(height: 6),
+              const AttachmentsBar(),
               const ListeningBar(),
               Composer(
                 busy: state.busy,
