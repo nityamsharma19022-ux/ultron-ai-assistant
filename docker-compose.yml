@@ -85,6 +85,7 @@ services:
       ULTRON_FREELLMAPI_BASE_URL: ${ULTRON_CORE_FREELLMAPI_BASE_URL:-http://host.docker.internal:31415/v1}
       ULTRON_LOG_FORMAT: ${ULTRON_CORE_LOG_FORMAT:-json}
       ULTRON_RUN_MIGRATIONS_ON_START: "true"
+      ULTRON_STT_MODEL_DIR: /models
     ports:
       # 127.0.0.1 by default. To let the Android app reach this Windows
       # backend over Wi-Fi, set ULTRON_CORE_BIND_HOST=0.0.0.0 (see docs).
@@ -97,6 +98,8 @@ services:
       # on with ULTRON_TLS_CERT_FILE=/run/ultron-tls/cert.pem and
       # ULTRON_TLS_KEY_FILE=/run/ultron-tls/key.pem in .env.
       - ./.ultron-core/tls:/run/ultron-tls:ro
+      # Speech-to-text model (faster-whisper), downloaded once on first use.
+      - models:/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,6 +129,8 @@ volumes:
     name: ultron_redis_data
   ollama_data:
     name: ultron_ollama_data
+  models:
+    name: ultron_models
 
 networks:
   ultron:

@@ -17,6 +17,8 @@ RUN uv sync --locked --no-dev --no-editable
 FROM python:3.13-slim
 
 RUN useradd --create-home --uid 10001 ultron
+# Speech model cache (a Docker volume), owned by the app user.
+RUN mkdir -p /models && chown ultron:ultron /models
 WORKDIR /app
 COPY --from=build --chown=ultron:ultron /app/.venv /app/.venv
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

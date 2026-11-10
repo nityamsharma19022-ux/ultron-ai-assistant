@@ -113,6 +113,17 @@ class Settings(BaseSettings):
     freellmapi_base_url: str | None = "http://127.0.0.1:31415/v1"
     # Used for Instant / Deep response modes when the model is "auto".
     freellmapi_fast_model: str = "auto:fast"
+    # --- Speech-to-text (faster-whisper, runs in Core on this PC) ---------
+    stt_enabled: bool = True
+    # tiny / base / small / medium (small: good English + Hindi on a CPU).
+    stt_model: str = "small"
+    stt_device: Literal["cpu", "cuda", "auto"] = "cpu"
+    stt_compute_type: str = "int8"
+    # Where the model is downloaded once (Docker: a volume).
+    stt_model_dir: str | None = None
+    stt_cpu_threads: int = Field(default=0, ge=0, le=64)  # 0 = automatic
+    stt_max_seconds: int = Field(default=60, ge=5, le=600)
+    stt_timeout_seconds: float = Field(default=60.0, gt=0, le=600)
     freellmapi_smart_model: str = "auto:smart"
     groq_api_key: SecretStr | None = None
     groq_model: str | None = None

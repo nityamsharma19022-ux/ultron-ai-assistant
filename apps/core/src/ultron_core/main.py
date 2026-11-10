@@ -5,6 +5,7 @@ Run locally:  uvicorn ultron_core.main:create_app --factory
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -12,7 +13,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 
-from ultron_core import __version__, activity, backup, modes, notifications, pairing
+from ultron_core import __version__, activity, backup, modes, notifications, pairing, voice
 from ultron_core.ai import api as ai_api
 from ultron_core.ai.cooldown import CooldownStore
 from ultron_core.ai.providers.base import ChatProvider
@@ -93,6 +94,7 @@ def create_app(
     *,
     ai_providers: list[ChatProvider] | None = None,
     start_task_engine: bool = True,
+    transcriber: voice.Transcriber | None = None,
 ) -> FastAPI:
     """``ai_providers`` replaces the configured providers and
     ``start_task_engine=False`` leaves the background task loop off (tests
@@ -124,6 +126,12 @@ def create_app(
     app.include_router(modes.router, prefix="/api/v1")
     app.include_router(notifications.router, prefix="/api/v1")
     app.include_router(backup.router, prefix="/api/v1")
+    app.include_router(voice.router, prefix="/api/v1")
+    # Speech-to-text: tests pass a fake; otherwise faster-whisper if installed.
+    if transcriber is None and settings.stt_enabled and voice.whisper_available():
+        transcriber = voice.WhisperTranscriber(settings)
+    app.state.transcriber = transcriber
+    app.state.transcribe_lock = asyncio.Lock()
     app.include_router(activity.router, prefix="/api/v1")
     app.include_router(tasks_router.router, prefix="/api/v1")
     app.include_router(agents_router.router, prefix="/api/v1")
