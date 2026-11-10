@@ -53,3 +53,4 @@ Thumbs.db
 # ULTRON Core HTTPS certificate and private key (ultron-core tls-init)
 .ultron-core/
 key.pem
+.ultron-bench/

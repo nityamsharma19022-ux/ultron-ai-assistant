@@ -51,6 +51,8 @@ class Plan:
     steps: list[PlannedStep]
     source: str  # rules | ai | manual
     answer: str | None = None
+    # Which fixed rule matched (fast path); None for AI and manual plans.
+    rule: str | None = None
 
 
 @dataclass
@@ -159,7 +161,7 @@ def _device_tool(ctx: PlanContext, pc_tool: str, phone_tool: str | None) -> str 
 
 
 def _due(ctx: PlanContext, m: re.Match[str]) -> datetime | None:
-    if m.group("n"):
+    if "n" in m.re.groupindex and m.group("n"):
         n = int(m.group("n"))
         unit = m.group("unit").lower()
         return ctx.now + (timedelta(hours=n) if unit.startswith("h") else timedelta(minutes=n))
@@ -188,6 +190,23 @@ _RULES: list[tuple[re.Pattern[str], str]] = [
             re.I,
         ),
         "remind",
+    ),
+    (
+        re.compile(
+            r"^(?:set|start|put)\s+(?:a\s+|an\s+)?(?:timer\s+(?:for\s+)?(?P<n>\d{1,4})\s*"
+            r"(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?)"
+            r"|(?P<n2>\d{1,4})[\s-]*(?P<unit2>seconds?|secs?|minutes?|mins?|hours?|hrs?)\s+timer)$",
+            re.I,
+        ),
+        "timer",
+    ),
+    (
+        re.compile(
+            r"^(?:(?:set|create)\s+(?:an?\s+)?alarm\s+(?:for|at)|wake me(?: up)? at)\s+"
+            r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>am|pm|a\.m\.|p\.m\.)?$",
+            re.I,
+        ),
+        "alarm",
     ),
     (
         # A web address: has a dot and a letters-only ending that isn't a program file.
@@ -292,6 +311,44 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
                     "args": {"text": m.group("text"), "due_at": due.isoformat()},
                 }
             ]
+        elif kind == "timer":
+            n = int(m.group("n") or m.group("n2"))
+            unit = (m.group("unit") or m.group("unit2")).lower()
+            seconds = n * (3600 if unit.startswith("h") else 60 if unit.startswith("m") else 1)
+            if not 1 <= seconds <= 24 * 3600:
+                return None
+            if available(ctx, "phone.timer.set"):
+                raw = [{"tool": "phone.timer.set", "args": {"seconds": seconds}}]
+            else:  # no phone connected: a reminder does the job
+                minutes = max(1, -(-seconds // 60))
+                raw = [
+                    {
+                        "tool": "reminders.create",
+                        "args": {"text": "Timer done", "in_minutes": minutes},
+                    }
+                ]
+        elif kind == "alarm":
+            hour, minute = int(m.group("h")), int(m.group("m") or 0)
+            ampm = (m.group("ampm") or "").replace(".", "").lower()
+            if ampm == "pm" and hour < 12:
+                hour += 12
+            if ampm == "am" and hour == 12:
+                hour = 0
+            if hour > 23 or minute > 59:
+                return None
+            if available(ctx, "phone.alarm.set"):
+                raw = [{"tool": "phone.alarm.set", "args": {"hour": hour, "minute": minute}}]
+            else:
+                local = ctx.now.astimezone(ctx.tz)
+                due = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if due <= local:
+                    due += timedelta(days=1)
+                raw = [
+                    {
+                        "tool": "reminders.create",
+                        "args": {"text": "Alarm", "due_at": due.isoformat()},
+                    }
+                ]
         elif kind == "url":
             if not available(ctx, "pc.web.open"):
                 return None
@@ -334,12 +391,25 @@ def rule_plan(text: str, ctx: PlanContext) -> Plan | None:
                 return None
             raw = [{"tool": "pc.workflows.run", "args": {"name": match}}]
         else:  # status
-            tool = "phone.status" if "phone" in t.lower() else "pc.status"
+            phone = "phone" in t.lower()
+            tool = "phone.status" if phone else "pc.status"
             if not available(ctx, tool):
-                return None
+                # Answer right away instead of asking an AI model.
+                return Plan(
+                    title="Status",
+                    steps=[],
+                    source="rules",
+                    rule="status",
+                    answer=(
+                        "I can't check your phone right now: ULTRON isn't open on it."
+                        if phone
+                        else "I can't check your PC right now: the ULTRON agent isn't connected. "
+                        "Start it with: uv run ultron-agent run"
+                    ),
+                )
             raw = [{"tool": tool, "args": {}}]
         steps = build_steps(raw, allowed_areas=ctx.allowed_areas)
-        return Plan(title=steps[0].title, steps=steps, source="rules")
+        return Plan(title=steps[0].title, steps=steps, source="rules", rule=kind)
     return None
 
 

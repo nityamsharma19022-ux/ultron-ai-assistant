@@ -231,6 +231,13 @@ async def send_message(
             )
         attached.append(doc.id)
 
+    if not attached:
+        fast = await _fast_path(
+            request, session, principal, conversation, body, settings, received_at
+        )
+        if fast is not None:
+            return fast
+
     manager: GenerationManager = request.app.state.generations
     try:
         active = manager.reserve(conversation.id, principal.user.id)
@@ -332,6 +339,90 @@ async def send_message(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
     return await _collect(active, created)
+
+
+# Fixed rules that are clear commands even in a chat. App names count only
+# when they match an app the device announced (so "open your heart" stays
+# a conversation).
+FAST_RULES = {"status", "timer", "alarm", "remind", "remember", "url", "workflow", "organize"}
+APP_RULES = {"open", "focus", "close"}
+FAST_WAIT_SECONDS = 4.0
+
+
+async def _fast_path(  # type: ignore[no-untyped-def]
+    request: Request, session, principal, conversation, body: MessageCreate, settings, received_at
+) -> Any:
+    """Clear commands typed (or spoken) in a chat run right away through the
+    planner and permission system, without calling any AI model."""
+    from ultron_core.tasks import planner
+    from ultron_core.tasks import router as tasks_router
+    from ultron_core.tasks import service as task_service
+
+    ctx = await task_service.plan_context(session, principal, None, body.utc_offset_minutes)
+    plan = planner.rule_plan(body.content, ctx)
+    if plan is None or plan.rule is None:
+        return None
+    if plan.rule in APP_RULES:
+        target = plan.steps[0].target if plan.steps else ""
+        announced = {a.lower() for a in ctx.capabilities.get(target, {}).get("apps", [])}
+        if str(plan.steps[0].args.get("app", "")).lower() not in announced:
+            return None
+    elif plan.rule not in FAST_RULES:
+        return None
+    prefs = await service.get_preferences(session, principal.user)
+    user_message, assistant_message = await service.start_exchange(
+        session, conversation, body.content
+    )
+    if plan.steps:
+        task = await task_service.create_task(
+            session, principal, plan, request=body.content, private=conversation.is_private
+        )
+        tasks_router._engine(request).wake()
+        await tasks_router._wait(session, task.id, FAST_WAIT_SECONDS)
+        text = tasks_router._task_message(
+            await tasks_router._out(session, task.id), prefs.address_as
+        )
+    else:
+        text = plan.answer or ""
+    elapsed = round((time.perf_counter() - received_at) * 1000)
+    assistant_message.content = text
+    assistant_message.status = "complete"
+    assistant_message.provider = "ultron"
+    assistant_message.provider_kind = "local"
+    assistant_message.model = "instant command"
+    assistant_message.first_token_ms = elapsed
+    assistant_message.duration_ms = elapsed
+    await session.commit()
+    routing = {
+        "provider": "ultron",
+        "kind": "local",
+        "model": "instant command",
+        "fallback_used": False,
+        "attempts": [],
+    }
+    user_out = MessageOut.model_validate(user_message).model_dump(mode="json")
+    assistant_out = MessageOut.model_validate(assistant_message).model_dump(mode="json")
+    if not body.stream:
+        return {"user_message": user_out, "assistant_message": assistant_out, "routing": routing}
+
+    async def events() -> AsyncIterator[str]:
+        yield _sse(
+            "message.created",
+            {
+                "user_message": user_out,
+                "assistant_message_id": str(assistant_message.id),
+                "private": conversation.is_private,
+            },
+        )
+        yield _sse("provider.selected", routing)
+        yield _sse("delta", {"text": text})
+        yield _sse("message.completed", {"assistant_message": assistant_out, "routing": routing})
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 async def _stream(
