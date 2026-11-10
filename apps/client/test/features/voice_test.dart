@@ -84,8 +84,16 @@ void main() {
       final mic = FakeSpeechInput(available: false);
       await pumpUltron(tester, FakeBackend(), signedIn: true, speechInput: mic);
       await tapMic(tester);
-      expect(find.text('Speech recognition is not available on this device.'), findsOneWidget);
+      expect(find.text('Speech recognition is not available on this device. Check microphone access.'), findsOneWidget);
       expect(mic.listenCalls, 0);
+      // A failure isn't remembered: after fixing mic access it works without a restart.
+      mic.available = true;
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(seconds: 1)); // let the message close
+      }
+      await tapMic(tester);
+      expect(mic.initCalls, 2);
+      expect(mic.listenCalls, 1);
     });
   });
 

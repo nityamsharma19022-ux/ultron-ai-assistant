@@ -16,6 +16,7 @@ import '../../core/theme/ultron_colors.dart';
 import '../../widgets/glass_panel.dart';
 import '../../widgets/ultron_logo.dart';
 import '../command/command_controller.dart';
+import '../voice/core_speech_input.dart';
 import '../voice/voice_controller.dart';
 import 'ai_preferences_controller.dart';
 
@@ -762,6 +763,7 @@ class _VoiceSection extends ConsumerWidget {
           icon: Icon(speaking ? Icons.stop : Icons.volume_up_outlined),
           label: Text(speaking ? 'Stop' : 'Test voice'),
         ),
+        if (ref.watch(speechInputProvider) is CoreSpeechInput) ...[const SizedBox(height: 14), const _VoiceEngine()],
         const SizedBox(height: 14),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -771,8 +773,8 @@ class _VoiceSection extends ConsumerWidget {
             Expanded(
               child: Text(
                 onDevice
-                    ? 'Speech recognition runs on this device (Windows Speech), so voice input also works in '
-                          'private conversations. Private replies are read with voices installed on this PC.'
+                    ? 'Speech recognition runs on your own PC (ULTRON Core, Whisper), so voice input also works '
+                          'in private conversations. Private replies are read with voices installed on this PC.'
                     : "This device's speech recognition may use an online service (on Android usually "
                           "Google's), so voice input is off in private conversations. Private replies are read "
                           'aloud only with an offline voice.',
@@ -867,4 +869,81 @@ class _AboutSection extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Windows speech recognition runs in ULTRON Core (Whisper): its status,
+/// and a button to load (the first time: download) the model.
+final voiceEngineProvider = FutureProvider<VoiceEngineStatus>((ref) => ref.watch(apiProvider).voiceStatus());
+
+class _VoiceEngine extends ConsumerStatefulWidget {
+  const _VoiceEngine();
+
+  @override
+  ConsumerState<_VoiceEngine> createState() => _VoiceEngineState();
+}
+
+class _VoiceEngineState extends ConsumerState<_VoiceEngine> {
+  bool _preparing = false;
+  String? _error;
+
+  Future<void> _prepare() async {
+    setState(() {
+      _preparing = true;
+      _error = null;
+    });
+    try {
+      await ref.read(apiProvider).voiceWarmup();
+      ref.invalidate(voiceEngineProvider);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _preparing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = ref.watch(voiceEngineProvider);
+    final text = status.when(
+      loading: () => 'Checking…',
+      error: (e, _) => e is ApiException ? e.message : 'Unavailable',
+      data: (s) => !s.available
+          ? 'Speech-to-text is turned off in ULTRON Core.'
+          : s.loaded
+          ? 'Ready (Whisper ${s.model}, on your PC)'
+          : 'Whisper ${s.model} — not loaded yet (loads on first use)',
+    );
+    final ready = status.value?.loaded ?? false;
+    return Column(
+      key: const Key('voice-engine'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              ready ? Icons.check_circle : Icons.record_voice_over_outlined,
+              size: 18,
+              color: ready ? UltronColors.success : UltronColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Speech recognition: $text', key: const Key('voice-engine-status'))),
+            if (!ready && (status.value?.available ?? false))
+              TextButton(
+                key: const Key('prepare-voice'),
+                onPressed: _preparing ? null : _prepare,
+                child: _preparing
+                    ? const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Prepare voice'),
+              ),
+          ],
+        ),
+        if (_preparing)
+          const Text(
+            'First time: downloading the speech model (about 500 MB)…',
+            style: TextStyle(fontSize: 12, color: UltronColors.textSecondary),
+          ),
+        if (_error != null) Text(_error!, style: const TextStyle(fontSize: 12, color: UltronColors.danger)),
+      ],
+    );
+  }
 }

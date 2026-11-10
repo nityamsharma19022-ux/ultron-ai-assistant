@@ -75,7 +75,11 @@ class ListeningBar extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      voice.transcript.isEmpty ? 'Listening… tap the mic again to send' : voice.transcript,
+                      voice.transcribing
+                          ? 'Transcribing…'
+                          : voice.transcript.isEmpty
+                          ? 'Listening… tap the mic again to send'
+                          : voice.transcript,
                       key: const Key('transcript'),
                       style: TextStyle(
                         color: voice.transcript.isEmpty ? UltronColors.textSecondary : UltronColors.textPrimary,

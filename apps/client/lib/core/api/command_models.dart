@@ -244,6 +244,33 @@ class UsageInfo {
   final List<UsageRow> rows;
 }
 
+/// Words heard in a voice recording (transcribed by ULTRON Core).
+class Transcript {
+  const Transcript({required this.text, this.language = '', this.seconds = 0, this.audioSeconds = 0});
+  factory Transcript.fromJson(Map<String, dynamic> j) => Transcript(
+    text: j['text'] as String? ?? '',
+    language: j['language'] as String? ?? '',
+    seconds: (j['seconds'] as num?)?.toDouble() ?? 0,
+    audioSeconds: (j['audio_seconds'] as num?)?.toDouble() ?? 0,
+  );
+  final String text;
+  final String language;
+  final double seconds;
+  final double audioSeconds;
+}
+
+class VoiceEngineStatus {
+  const VoiceEngineStatus({required this.available, required this.model, required this.loaded});
+  factory VoiceEngineStatus.fromJson(Map<String, dynamic> j) => VoiceEngineStatus(
+    available: j['available'] as bool? ?? false,
+    model: j['model'] as String? ?? '',
+    loaded: j['loaded'] as bool? ?? false,
+  );
+  final bool available;
+  final String model;
+  final bool loaded;
+}
+
 /// Friendly names for AI providers.
 String providerDisplayName(String name) => switch (name) {
   'freellmapi' => 'FreeLLMAPI',

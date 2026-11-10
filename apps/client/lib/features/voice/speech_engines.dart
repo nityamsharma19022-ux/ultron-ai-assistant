@@ -21,6 +21,8 @@ abstract class SpeechInput {
     required void Function(double level) onLevel,
     required void Function() onDone,
     required void Function(String message) onError,
+    // Called when recording ended and the words are being worked out.
+    void Function()? onProcessing,
   });
 
   /// Stops listening; the words heard so far arrive as a final result.
@@ -74,6 +76,7 @@ class PluginSpeechInput implements SpeechInput {
     required void Function(double level) onLevel,
     required void Function() onDone,
     required void Function(String message) onError,
+    void Function()? onProcessing,
   }) async {
     _onDone = onDone;
     _onError = onError;

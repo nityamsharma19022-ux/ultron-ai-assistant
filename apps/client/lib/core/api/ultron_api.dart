@@ -387,6 +387,35 @@ class UltronApi {
   Future<void> deleteDocument(String id) => _json('DELETE', '/api/v1/documents/$id', expectBody: false);
 
   /// Uploads a file; ULTRON Core extracts and indexes its text.
+  /// Sends a WAV recording to ULTRON Core and returns the words heard.
+  Future<Transcript> transcribe(List<int> wav, {String? language, bool retry = true}) async {
+    final request = http.MultipartRequest('POST', _uri('/api/v1/voice/transcribe'))
+      ..headers.addAll(await _headers())
+      ..files.add(http.MultipartFile.fromBytes('audio', wav, filename: 'speech.wav'));
+    if (language != null) request.fields['language'] = language;
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await _client.send(request)).timeout(const Duration(seconds: 90));
+    } on TimeoutException {
+      throw const ApiException.network('Transcription took too long.');
+    } on http.ClientException {
+      throw const ApiException.network();
+    }
+    if (response.statusCode == 401 && retry && await _refresh()) {
+      return transcribe(wav, language: language, retry: false);
+    }
+    final text = utf8.decode(response.bodyBytes);
+    if (response.statusCode >= 400) throw _error(response.statusCode, text);
+    return Transcript.fromJson(jsonDecode(text) as Map<String, dynamic>);
+  }
+
+  Future<VoiceEngineStatus> voiceStatus() async =>
+      VoiceEngineStatus.fromJson(await _json('GET', '/api/v1/voice/status'));
+
+  /// Loads the speech model in Core (first time: downloads it).
+  Future<VoiceEngineStatus> voiceWarmup() async =>
+      VoiceEngineStatus.fromJson(await _json('POST', '/api/v1/voice/warmup', timeout: const Duration(minutes: 10)));
+
   Future<DocumentInfo> uploadDocument(String name, List<int> bytes, {bool private = false, bool retry = true}) async {
     final request = http.MultipartRequest('POST', _uri('/api/v1/documents'))
       ..headers.addAll(await _headers())

@@ -16,6 +16,10 @@ class FakeSpeechInput implements SpeechInput {
   void Function(double level)? _onLevel;
   void Function()? _onDone;
   void Function(String message)? _onError;
+  void Function()? _onProcessing;
+
+  /// Like the Windows plugin bug: stop() delivers nothing at all.
+  bool silentStop = false;
 
   @override
   Future<bool> initialize() async {
@@ -30,8 +34,10 @@ class FakeSpeechInput implements SpeechInput {
     required void Function(double level) onLevel,
     required void Function() onDone,
     required void Function(String message) onError,
+    void Function()? onProcessing,
   }) async {
     listenCalls++;
+    _onProcessing = onProcessing;
     lastLocale = localeId;
     _heard = '';
     _onResult = onResult;
@@ -47,12 +53,14 @@ class FakeSpeechInput implements SpeechInput {
   }
 
   void level(double value) => _onLevel?.call(value);
+  void processing() => _onProcessing?.call();
   void fail(String message) => _onError?.call(message);
 
   /// Like the real plugin: stopping delivers the final result, then "done".
   @override
   Future<void> stop() async {
     stopCalls++;
+    if (silentStop) return;
     _onResult?.call(_heard, true);
     _onDone?.call();
   }

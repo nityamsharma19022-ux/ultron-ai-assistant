@@ -1,14 +1,25 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/models.dart';
+import '../../core/providers.dart';
 import '../../core/settings/app_settings.dart';
 import '../chat/chat_controller.dart';
 import '../chat/chat_state.dart';
+import 'core_speech_input.dart';
 import 'speech_engines.dart';
 
-final speechInputProvider = Provider<SpeechInput>((ref) => PluginSpeechInput());
+/// Windows: the app records and ULTRON Core transcribes (faster-whisper),
+/// because the Windows speech plugin never reports a final result. Android
+/// and the web use the device's own recogniser.
+final speechInputProvider = Provider<SpeechInput>(
+  (ref) => !kIsWeb && defaultTargetPlatform == TargetPlatform.windows
+      ? CoreSpeechInput(() => ref.read(apiProvider), RecordPcmRecorder())
+      : PluginSpeechInput(),
+);
 final speechOutputProvider = Provider<SpeechOutput>((ref) => PluginSpeechOutput());
 
 const privateVoiceInputBlocked =
@@ -19,6 +30,7 @@ const privateNoOfflineVoice = 'No offline voice is installed, so this private re
 class VoiceState {
   const VoiceState({
     this.listening = false,
+    this.transcribing = false,
     this.speaking = false,
     this.level = 0,
     this.transcript = '',
@@ -27,6 +39,9 @@ class VoiceState {
   });
 
   final bool listening;
+
+  /// Recording finished; ULTRON is working out the words.
+  final bool transcribing;
   final bool speaking;
 
   /// Microphone loudness, 0..1 (drives the visualizer).
@@ -39,17 +54,20 @@ class VoiceState {
   final String? notice;
   final int noticeId;
 
-  VoiceState copyWith({bool? listening, bool? speaking, double? level, String? transcript}) => VoiceState(
-    listening: listening ?? this.listening,
-    speaking: speaking ?? this.speaking,
-    level: level ?? this.level,
-    transcript: transcript ?? this.transcript,
-    notice: notice,
-    noticeId: noticeId,
-  );
+  VoiceState copyWith({bool? listening, bool? transcribing, bool? speaking, double? level, String? transcript}) =>
+      VoiceState(
+        listening: listening ?? this.listening,
+        transcribing: transcribing ?? this.transcribing,
+        speaking: speaking ?? this.speaking,
+        level: level ?? this.level,
+        transcript: transcript ?? this.transcript,
+        notice: notice,
+        noticeId: noticeId,
+      );
 
   VoiceState withNotice(String message) => VoiceState(
     listening: listening,
+    transcribing: transcribing,
     speaking: speaking,
     level: level,
     transcript: transcript,
@@ -66,7 +84,12 @@ final voiceProvider = NotifierProvider<VoiceController, VoiceState>(VoiceControl
 /// where recognition stays on the device, and replies are read aloud only
 /// with an offline voice.
 class VoiceController extends Notifier<VoiceState> {
-  bool? _available;
+  /// Listening always ends after this, even if the recogniser never reports
+  /// back (the Windows plugin could leave the mic "listening" forever).
+  static Duration watchdog = const Duration(seconds: 75);
+
+  bool _available = false;
+  Timer? _watchdog;
   int _listenSession = 0;
   int _speakSession = 0;
   // Set while the assistant screen listens: the words go there, not to chat.
@@ -81,6 +104,7 @@ class VoiceController extends Notifier<VoiceState> {
     ref.onDispose(() {
       _listenSession++;
       _speakSession++;
+      _watchdog?.cancel();
     });
     return const VoiceState();
   }
@@ -127,16 +151,27 @@ class VoiceController extends Notifier<VoiceState> {
   }
 
   Future<void> _startListening() async {
-    await stopSpeaking();
-    try {
-      _available ??= await _input.initialize();
-    } on Object {
-      _available = false;
-    }
-    if (_available != true) return _notice('Speech recognition is not available on this device.');
-
+    // Instant feedback: the listening state and a sound before anything slow.
     final session = ++_listenSession;
-    state = state.copyWith(listening: true, transcript: '', level: 0);
+    state = state.copyWith(listening: true, transcribing: false, transcript: '', level: 0);
+    _feedback(start: true);
+    await stopSpeaking();
+    if (!_available) {
+      // Not cached when it fails: fixing mic permission works without a restart.
+      try {
+        _available = await _input.initialize();
+      } on Object {
+        _available = false;
+      }
+    }
+    if (session != _listenSession) return;
+    if (!_available) {
+      _listenSession++;
+      state = state.copyWith(listening: false, transcript: '', level: 0);
+      return _notice('Speech recognition is not available on this device. Check microphone access.');
+    }
+    _watchdog?.cancel();
+    _watchdog = Timer(watchdog, () => _onWatchdog(session));
     try {
       await _input.listen(
         localeId: ref.read(settingsProvider).voiceLocale,
@@ -154,6 +189,9 @@ class VoiceController extends Notifier<VoiceState> {
           _finishListening(session, send: false);
           _notice(message);
         },
+        onProcessing: () {
+          if (session == _listenSession && state.listening) state = state.copyWith(transcribing: true, level: 0);
+        },
       );
     } on Object {
       _finishListening(session, send: false);
@@ -162,11 +200,34 @@ class VoiceController extends Notifier<VoiceState> {
     if (!state.listening) _completeCapture(null);
   }
 
+  void _onWatchdog(int session) {
+    if (session != _listenSession || !state.listening) return;
+    final heard = state.transcript.trim().isNotEmpty;
+    unawaited(_input.cancel());
+    _finishListening(session, send: heard);
+    if (!heard) _notice('Listening stopped: no words were recognised. Try again.');
+  }
+
+  /// Short, instant confirmation that the mic opened or closed.
+  void _feedback({required bool start}) {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        unawaited(HapticFeedback.lightImpact());
+        unawaited(SystemSound.play(SystemSoundType.click));
+      } else if (start) {
+        unawaited(SystemSound.play(SystemSoundType.alert));
+      }
+    } on Object {
+      // Sound is optional.
+    }
+  }
+
   /// Stops listening and throws away what was heard.
   Future<void> cancelListening() async {
     if (!state.listening) return;
     _listenSession++;
-    state = state.copyWith(listening: false, transcript: '', level: 0);
+    _watchdog?.cancel();
+    state = state.copyWith(listening: false, transcribing: false, transcript: '', level: 0);
     _completeCapture(null);
     await _input.cancel();
   }
@@ -174,8 +235,10 @@ class VoiceController extends Notifier<VoiceState> {
   void _finishListening(int session, {required bool send}) {
     if (session != _listenSession || !state.listening) return;
     _listenSession++;
+    _watchdog?.cancel();
     final text = state.transcript.trim();
-    state = state.copyWith(listening: false, transcript: '', level: 0);
+    state = state.copyWith(listening: false, transcribing: false, transcript: '', level: 0);
+    if (send && text.isNotEmpty) _feedback(start: false);
     if (_capture != null) return _completeCapture(send && text.isNotEmpty ? text : null);
     if (!send || text.isEmpty) return;
     // The chat may have been switched to private while listening.
