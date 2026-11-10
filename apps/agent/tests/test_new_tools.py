@@ -52,7 +52,9 @@ def test_running_and_close_app(ctx) -> None:
     opened = apps.open_app(ctx, {"app": "sleeper"})
     assert opened["verified"]
     out = apps.close_app(ctx, {"app": "sleeper"})
-    assert out["verified"] and out["closed"] == 1
+    # On Windows a venv's python.exe is a launcher with a child that has the
+    # same command line, so both belong to the app and both are closed.
+    assert out["verified"] and out["closed"] >= 1
     again = apps.close_app(ctx, {"app": "sleeper"})
     assert "wasn't running" in again["summary"]
     with pytest.raises(ToolError, match="allowed apps"):
