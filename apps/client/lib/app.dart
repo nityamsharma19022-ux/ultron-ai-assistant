@@ -8,6 +8,7 @@ import 'features/auth/login_screen.dart';
 import 'features/chat/chat_page.dart';
 import 'features/shell/app_shell.dart';
 import 'features/shell/sections.dart';
+import 'features/visualizer/chat_visualizer.dart';
 import 'widgets/glass_panel.dart';
 import 'widgets/ultron_background.dart';
 import 'widgets/ultron_logo.dart';
@@ -42,7 +43,10 @@ class UltronApp extends ConsumerWidget {
 /// Section pages. Dashboard and settings are placeholders until their
 /// increment lands.
 Map<AppSection, Widget> defaultPages() => {
-  AppSection.chat: const ChatPage(),
+  AppSection.chat: ChatPage(
+    heroBuilder: (context, state, size) => ChatVisualizer(size: size),
+    headerOrbBuilder: (context, state, size) => ChatVisualizer(size: size),
+  ),
   AppSection.dashboard: const _ComingSoon(section: AppSection.dashboard),
   AppSection.settings: const _ComingSoon(section: AppSection.settings),
 };
