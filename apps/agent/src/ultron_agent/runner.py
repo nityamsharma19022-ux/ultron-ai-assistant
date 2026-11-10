@@ -90,10 +90,10 @@ def run(config: AgentConfig, client: CoreClient, *, once: bool = False) -> None:
     tools = registry.enabled(config)
     backoff = 1.0
     greeted = False
-    last_metrics = 0.0
+    last_metrics: float | None = None  # push right away, even just after boot
     while True:
         try:
-            if time.monotonic() - last_metrics >= METRICS_EVERY:
+            if last_metrics is None or time.monotonic() - last_metrics >= METRICS_EVERY:
                 push_metrics(config, client)
                 last_metrics = time.monotonic()
             if not greeted:

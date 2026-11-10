@@ -40,6 +40,11 @@ approval, no covert monitoring, credentials stay out of the code.
 **Planner rules added** for "close <app>" (always asks) and "open
 <web address>", so these work without any AI.
 
+**CI found two issues, fixed:** on Windows, closing an app started from a
+Python venv closes the launcher and its child (test assumed one process);
+and the agent skipped its first metrics push on a machine booted less
+than 30 seconds earlier.
+
 **Checks**
 - Backend: **221 passed** with real PostgreSQL + Redis; ruff clean.
 - Agent: **36 passed** on Linux (+1 Windows-only; Windows CI on push).
