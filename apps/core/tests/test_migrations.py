@@ -33,7 +33,7 @@ def test_downgrade_and_upgrade_round_trip(migrated_database) -> None:  # type: i
 
 
 def test_head_revision_is_known() -> None:
-    assert migrate.head_revision() == "0002"
+    assert migrate.head_revision() == "0004"
 
 
 def test_cloud_migrations_blocked_without_explicit_flag() -> None:

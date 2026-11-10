@@ -67,7 +67,11 @@ async def get_preferences(session: AsyncSession, user: User) -> UserAIPreference
     prefs = await session.get(UserAIPreferences, user.id)
     if prefs is None:
         prefs = UserAIPreferences(
-            user_id=user.id, mode="auto", cloud_order=[], private_by_default=False
+            user_id=user.id,
+            mode="auto",
+            cloud_order=[],
+            private_by_default=False,
+            memory_enabled=True,
         )
     return prefs
 

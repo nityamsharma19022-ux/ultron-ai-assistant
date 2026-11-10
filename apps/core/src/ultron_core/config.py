@@ -138,6 +138,14 @@ class Settings(BaseSettings):
     # --- Chat ---------------------------------------------------------------
     chat_max_message_chars: int = Field(default=12_000, ge=100, le=100_000)
     chat_rate_limit_per_minute: int = Field(default=20, ge=1, le=1000)
+    # How many saved memories are added to the AI's context per message.
+    memory_context_limit: int = Field(default=8, ge=0, le=50)
+    # Tasks: how long a step waits for its device (PC/phone) to connect, and
+    # how long a device may take to finish a step before it's retried.
+    task_device_wait_minutes: int = Field(default=30, ge=1, le=24 * 60)
+    task_step_timeout_minutes: int = Field(default=15, ge=1, le=24 * 60)
+    # How long POST /assistant/command waits for a task to finish.
+    assistant_wait_seconds: float = Field(default=20, ge=0, le=120)
 
     @model_validator(mode="after")
     def _validate(self) -> Settings:

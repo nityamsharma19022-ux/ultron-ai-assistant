@@ -103,9 +103,10 @@ class GenerationManager:
         history: list[ChatMessage],
         settings: Settings,
         sessionmaker: async_sessionmaker[AsyncSession],
+        system: str = SYSTEM_PROMPT,
     ) -> None:
         active.task = asyncio.create_task(
-            self._run(active, router, prefs, private, history, settings, sessionmaker),
+            self._run(active, router, prefs, private, history, settings, sessionmaker, system),
             name=f"ultron-generation-{active.conversation_id}",
         )
 
@@ -118,6 +119,7 @@ class GenerationManager:
         history: list[ChatMessage],
         settings: Settings,
         sessionmaker: async_sessionmaker[AsyncSession],
+        system: str = SYSTEM_PROMPT,
     ) -> None:
         def build_request(provider: ChatProvider) -> ChatRequest:
             return ChatRequest(
@@ -126,7 +128,7 @@ class GenerationManager:
                     char_budget=provider.context_char_budget,
                     max_messages=settings.ai_context_max_messages,
                 ),
-                system=SYSTEM_PROMPT,
+                system=system,
                 max_output_tokens=settings.ai_max_output_tokens,
             )
 

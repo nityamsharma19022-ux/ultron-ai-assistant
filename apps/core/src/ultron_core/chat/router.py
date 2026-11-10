@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ultron_core import ratelimit
+from ultron_core.ai.context import SYSTEM_PROMPT
 from ultron_core.chat import service
 from ultron_core.chat.generation import ActiveGeneration, ConversationBusyError, GenerationManager
 from ultron_core.chat.schemas import (
@@ -26,6 +27,7 @@ from ultron_core.chat.schemas import (
 )
 from ultron_core.db.models import Conversation
 from ultron_core.deps import PrincipalDep, RedisDep, SessionDep, SettingsDep
+from ultron_core.memory import service as memory_service
 
 router = APIRouter(prefix="/conversations", tags=["chat"])
 
@@ -183,11 +185,24 @@ async def send_message(
         ) from None
 
     try:
-        prefs = service.routing_preferences(await service.get_preferences(session, principal.user))
+        stored_prefs = await service.get_preferences(session, principal.user)
+        prefs = service.routing_preferences(stored_prefs)
+        memory_on = stored_prefs.memory_enabled
         user_message, assistant_message = await service.start_exchange(
             session, conversation, body.content
         )
         history = await service.load_history(session, conversation)
+        recalled = (
+            await memory_service.recall(
+                session,
+                principal.user,
+                body.content,
+                private=conversation.is_private,
+                limit=settings.memory_context_limit,
+            )
+            if memory_on
+            else []
+        )
     except BaseException:
         manager.release(conversation.id)
         raise
@@ -200,12 +215,14 @@ async def send_message(
         history=history,
         settings=settings,
         sessionmaker=request.app.state.sessionmaker,
+        system=SYSTEM_PROMPT + memory_service.context_block(recalled),
     )
 
     created = {
         "user_message": MessageOut.model_validate(user_message).model_dump(mode="json"),
         "assistant_message_id": str(assistant_message.id),
         "private": conversation.is_private,
+        "memories_used": len(recalled),
     }
     if body.stream:
         return StreamingResponse(

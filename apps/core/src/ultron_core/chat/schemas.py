@@ -97,12 +97,15 @@ class PreferencesIn(_Strict):
     mode: Literal["auto", "cloud_only", "local_only"] = "auto"
     cloud_order: list[str] = Field(default_factory=list, max_length=20)
     private_by_default: bool = False
+    # None keeps the current value (older apps don't send it).
+    memory_enabled: bool | None = None
 
 
 class PreferencesOut(BaseModel):
     mode: str
     cloud_order: list[str]
     private_by_default: bool
+    memory_enabled: bool
     available_cloud_providers: list[str]
 
 

@@ -75,6 +75,7 @@ def _prefs_out(prefs, ai_router: AIRouter) -> PreferencesOut:  # type: ignore[no
         mode=prefs.mode,
         cloud_order=list(prefs.cloud_order),
         private_by_default=prefs.private_by_default,
+        memory_enabled=prefs.memory_enabled,
         available_cloud_providers=[p.name for p in ai_router.cloud_providers],
     )
 
@@ -104,6 +105,8 @@ async def put_preferences(
     prefs.mode = body.mode
     prefs.cloud_order = order
     prefs.private_by_default = body.private_by_default
+    if body.memory_enabled is not None:
+        prefs.memory_enabled = body.memory_enabled
     session.add(prefs)
     await session.commit()
     return _prefs_out(prefs, ai_router)

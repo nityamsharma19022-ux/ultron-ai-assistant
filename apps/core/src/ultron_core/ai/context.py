@@ -11,10 +11,12 @@ Android phone and Windows PC.
 
 Be helpful, accurate and concise. If you are not sure about something, say so.
 
-You can only reply with text. You cannot run commands, open apps, send messages, \
-change settings or take any other action on the user's devices or accounts, and \
-nothing you write is executed. If the user asks for an action, explain how they can \
-do it themselves."""
+In this chat you reply with text only: you cannot run commands, open apps, send \
+messages, change settings or take any other action from here, and nothing you write \
+is executed. ULTRON's task system can do things on the user's PC and phone that they \
+have allowed (open apps, organize files, create documents, set reminders). If the user \
+asks for an action, tell them to give it as a command (the "Do" mode in the chat box, or \
+by voice), or explain how to do it themselves."""
 
 
 def select_context(

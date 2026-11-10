@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 from fastapi import FastAPI
 
-from ultron_core import __version__
+from ultron_core import __version__, activity
 from ultron_core.ai import api as ai_api
 from ultron_core.ai.cooldown import CooldownStore
 from ultron_core.ai.providers.base import ChatProvider
@@ -26,8 +26,12 @@ from ultron_core.config import Settings, get_settings
 from ultron_core.db.migrate import head_revision
 from ultron_core.db.session import create_engine, create_sessionmaker
 from ultron_core.logging_setup import configure_logging, get_logger
+from ultron_core.memory import router as memory_router
 from ultron_core.middleware import RequestContextMiddleware
 from ultron_core.redis_client import create_redis
+from ultron_core.tasks import agents as agents_router
+from ultron_core.tasks import router as tasks_router
+from ultron_core.tasks.engine import TaskEngine
 
 log = get_logger("ultron.app")
 
@@ -48,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings, providers, CooldownStore(app.state.redis, settings)
     )
     app.state.generations = GenerationManager()
+    app.state.task_engine = TaskEngine(app.state.sessionmaker, app.state.ai_router, settings)
     try:
         async with app.state.sessionmaker() as session:
             stale = await mark_stale_generations_failed(session)
@@ -65,9 +70,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         schema_head=app.state.schema_head,
         ai_providers=[f"{p.name}({p.kind.value})" for p in providers if p.is_configured()],
     )
+    if app.state.start_task_engine:
+        app.state.task_engine.start()
     try:
         yield
     finally:
+        await app.state.task_engine.stop()
         await app.state.generations.shutdown()
         for provider in providers:
             await provider.aclose()
@@ -78,9 +86,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(
-    settings: Settings | None = None, *, ai_providers: list[ChatProvider] | None = None
+    settings: Settings | None = None,
+    *,
+    ai_providers: list[ChatProvider] | None = None,
+    start_task_engine: bool = True,
 ) -> FastAPI:
-    """``ai_providers`` replaces the configured providers (used by tests)."""
+    """``ai_providers`` replaces the configured providers and
+    ``start_task_engine=False`` leaves the background task loop off (tests
+    drive it step by step)."""
     settings = settings or get_settings()
     configure_logging(settings.log_level, settings.log_format)
 
@@ -95,12 +108,17 @@ def create_app(
     )
     app.state.settings = settings
     app.state.provider_override = ai_providers
+    app.state.start_task_engine = start_task_engine
     app.add_middleware(RequestContextMiddleware)
 
     app.include_router(health.router)
     app.include_router(auth_router.router, prefix="/api/v1")
     app.include_router(chat_router.router, prefix="/api/v1")
     app.include_router(ai_api.router, prefix="/api/v1")
+    app.include_router(memory_router.router, prefix="/api/v1")
+    app.include_router(activity.router, prefix="/api/v1")
+    app.include_router(tasks_router.router, prefix="/api/v1")
+    app.include_router(agents_router.router, prefix="/api/v1")
 
     @app.get("/", include_in_schema=False)
     async def root() -> dict[str, Any]:
